@@ -1,0 +1,20 @@
+{% extends "_base.html.j2" %}
+{% block title %}Milestone update: {{ milestone_name }}{% endblock %}
+{% block content %}
+<p class="greeting">Hello, {{ full_name }},</p>
+<div style="background: #1c1917; border: 1px solid #44403c; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+  <p style="color: #a8a29e; margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">MILESTONE UPDATE</p>
+  <h2 style="color: #f1f5f9; font-size: 22px; margin: 0;">{{ milestone_name }}</h2>
+  <p style="color: #a8a29e; margin: 8px 0 0 0; font-size: 14px;">{{ project_name }}</p>
+</div>
+{% if delay_reason %}
+<p><strong style="color: #e2e8f0;">Reason for delay:</strong> {{ delay_reason }}</p>
+{% endif %}
+{% if new_date %}
+<p><strong style="color: #e2e8f0;">New expected date:</strong> {{ new_date.strftime('%d %B %Y') if new_date else 'To be confirmed' }}</p>
+{% endif %}
+<p>We apologize for any inconvenience. Our team is working to complete this milestone as soon as possible.</p>
+<div style="text-align: center;">
+  <a href="https://buildtrack.co.ke/buyer/dashboard" class="btn">View Project</a>
+</div>
+{% endblock %}

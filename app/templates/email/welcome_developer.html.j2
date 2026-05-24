@@ -1,0 +1,18 @@
+{% extends "_base.html.j2" %}
+{% block title %}Welcome to BuildTrack!{% endblock %}
+{% block content %}
+<p class="greeting">Welcome to BuildTrack, {{ full_name }}!</p>
+<p>Your developer account for <strong style="color: #e2e8f0;">{{ company_name }}</strong> has been created successfully. You're on the <span class="badge">Trial Plan</span> — no credit card required.</p>
+<p>Here's what you can do right now:</p>
+<ul style="color: #94a3b8; padding-left: 20px; margin-bottom: 24px; line-height: 2;">
+  <li>Create your first construction project</li>
+  <li>Invite buyers to track progress</li>
+  <li>Upload GPS-verified site photos</li>
+  <li>Track construction milestones</li>
+</ul>
+<div style="text-align: center;">
+  <a href="https://buildtrack.co.ke/developer/dashboard" class="btn">Go to Dashboard</a>
+</div>
+<hr class="divider">
+<p style="font-size: 13px; color: #475569;">Need help? Reply to this email or contact <a href="mailto:support@buildtrack.co.ke" style="color: #60a5fa;">support@buildtrack.co.ke</a></p>
+{% endblock %}

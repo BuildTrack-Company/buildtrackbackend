@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}BuildTrack{% endblock %}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; color: #e2e8f0; }
+    .wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+    .header { background: linear-gradient(135deg, #1e40af, #7c3aed); padding: 32px; border-radius: 12px 12px 0 0; text-align: center; }
+    .header h1 { color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .header .tagline { color: #bfdbfe; font-size: 13px; margin-top: 4px; }
+    .content { background-color: #1e293b; padding: 40px 32px; border-radius: 0 0 12px 12px; }
+    .greeting { font-size: 18px; font-weight: 600; color: #f1f5f9; margin-bottom: 16px; }
+    p { color: #94a3b8; font-size: 15px; line-height: 1.7; margin-bottom: 16px; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 24px 0; }
+    .divider { border: none; border-top: 1px solid #334155; margin: 28px 0; }
+    .footer { text-align: center; margin-top: 32px; color: #475569; font-size: 12px; line-height: 1.8; }
+    .footer a { color: #60a5fa; text-decoration: none; }
+    .badge { display: inline-block; background: #172554; color: #60a5fa; border: 1px solid #1e3a8a; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      <h1>BuildTrack</h1>
+      <div class="tagline">Construction Progress Platform</div>
+    </div>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+    <div class="footer">
+      <p>© 2026 BuildTrack. All rights reserved.</p>
+      <p><a href="https://buildtrack.co.ke">buildtrack.co.ke</a> · <a href="mailto:support@buildtrack.co.ke">support@buildtrack.co.ke</a></p>
+      <p style="margin-top: 8px; color: #334155;">You're receiving this because you're associated with a BuildTrack project.</p>
+    </div>
+  </div>
+</body>
+</html>

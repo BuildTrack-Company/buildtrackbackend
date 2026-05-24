@@ -1,0 +1,14 @@
+{% extends "_base.html.j2" %}
+{% block title %}Your BuildTrack trial is ending soon{% endblock %}
+{% block content %}
+<p class="greeting">Hello, {{ full_name }}!</p>
+<div style="background: #431407; border: 1px solid #7c2d12; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+  <p style="color: #fed7aa; margin: 0; font-weight: 600;">⚠️ Your trial ends in {{ days_remaining }} day{% if days_remaining != 1 %}s{% endif %}</p>
+</div>
+<p>Your BuildTrack trial for <strong style="color: #e2e8f0;">{{ company_name }}</strong> is expiring soon. Upgrade now to continue using all features without interruption.</p>
+<div style="text-align: center;">
+  <a href="https://buildtrack.co.ke/billing/upgrade" class="btn">Upgrade Now</a>
+</div>
+<hr class="divider">
+<p style="font-size: 13px; color: #475569;">Questions? Contact <a href="mailto:support@buildtrack.co.ke" style="color: #60a5fa;">support@buildtrack.co.ke</a></p>
+{% endblock %}

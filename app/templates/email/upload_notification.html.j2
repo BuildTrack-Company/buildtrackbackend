@@ -1,0 +1,19 @@
+{% extends "_base.html.j2" %}
+{% block title %}New photos uploaded: {{ project_name }}{% endblock %}
+{% block content %}
+<p class="greeting">Hello, {{ full_name }}!</p>
+<div style="background: #172554; border: 1px solid #1e3a8a; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+  <div class="badge" style="margin-bottom: 12px;">Site Update</div>
+  <h2 style="color: #f1f5f9; font-size: 20px; margin-bottom: 8px;">{{ project_name }}</h2>
+  <p style="margin: 0; color: #60a5fa;">📸 {{ photo_count }} new photo{% if photo_count != 1 %}s{% endif %} uploaded</p>
+</div>
+{% if caption %}
+<p style="border-left: 3px solid #2563eb; padding-left: 16px; color: #cbd5e1; font-style: italic;">"{{ caption }}"</p>
+{% endif %}
+<p>New construction photos have been uploaded to your project. Log in to BuildTrack to view them with verified GPS location data.</p>
+<div style="text-align: center;">
+  <a href="https://buildtrack.co.ke/buyer/dashboard" class="btn">View Photos</a>
+</div>
+<hr class="divider">
+<p style="font-size: 13px; color: #475569;">You can manage your notification preferences in your account settings.</p>
+{% endblock %}

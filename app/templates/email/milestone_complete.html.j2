@@ -1,0 +1,14 @@
+{% extends "_base.html.j2" %}
+{% block title %}Milestone completed: {{ milestone_name }}{% endblock %}
+{% block content %}
+<p class="greeting">Great news, {{ full_name }}!</p>
+<div style="background: #052e16; border: 1px solid #14532d; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+  <p style="color: #86efac; margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">MILESTONE COMPLETED</p>
+  <h2 style="color: #f1f5f9; font-size: 22px; margin: 0;">{{ milestone_name }}</h2>
+  <p style="color: #4ade80; margin: 8px 0 0 0; font-size: 14px;">{{ project_name }}</p>
+</div>
+<p>A key construction milestone has been completed on your project. Log in to BuildTrack to view the latest site photos and progress updates.</p>
+<div style="text-align: center;">
+  <a href="https://buildtrack.co.ke/buyer/dashboard" class="btn">View Progress</a>
+</div>
+{% endblock %}
