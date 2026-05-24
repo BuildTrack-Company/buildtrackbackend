@@ -12,6 +12,7 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
     gps_radius_metres: float = 100.0
     estimated_completion: Optional[datetime] = None
+    workflow_template_id: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -42,6 +43,9 @@ class ProjectResponse(BaseModel):
     cover_image_url: Optional[str]
     estimated_completion: Optional[datetime]
     is_public: bool
+    project_type_id: Optional[str]
+    workflow_template_id: Optional[str]
+    current_stage_id: Optional[str]
     created_at: datetime
     updated_at: datetime
 

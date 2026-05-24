@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Integer, Text, Float
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 from app.shared.ids import new_id
@@ -19,5 +19,6 @@ class Milestone(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delay_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     delay_new_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    workflow_stage_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_stages.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Integer, Text, Float
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 from app.shared.ids import new_id
@@ -23,6 +23,9 @@ class Project(Base):
     cover_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     estimated_completion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
+    project_type_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("project_types.id"), nullable=True)
+    workflow_template_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_templates.id"), nullable=True)
+    current_stage_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_stages.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

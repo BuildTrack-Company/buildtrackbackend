@@ -21,6 +21,16 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         if not result.scalar_one_or_none():
             break
 
+    # Resolve workflow template
+    workflow_template_id = req.workflow_template_id
+    project_type_id = None
+    if workflow_template_id:
+        from app.modules.project_types.models import WorkflowTemplate
+        tmpl_result = await db.execute(select(WorkflowTemplate).where(WorkflowTemplate.id == workflow_template_id))
+        tmpl = tmpl_result.scalar_one_or_none()
+        if tmpl:
+            project_type_id = tmpl.project_type_id
+
     project = Project(
         id=new_id(),
         developer_id=developer_id,
@@ -34,37 +44,62 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         total_units=req.total_units,
         estimated_completion=req.estimated_completion,
         status="planning",
+        workflow_template_id=workflow_template_id,
+        project_type_id=project_type_id,
     )
     db.add(project)
     await db.flush()
 
-    # Seed milestones
-    await seed_milestones(db, project.id)
+    # Seed milestones from template or defaults
+    await seed_milestones(db, project.id, workflow_template_id)
 
     await db.commit()
     await db.refresh(project)
     return project
 
 
-async def seed_milestones(db: AsyncSession, project_id: str):
+async def seed_milestones(db: AsyncSession, project_id: str, workflow_template_id: str = None):
     from app.modules.milestones.models import Milestone
 
-    default_milestones = [
-        ("Foundation", 1),
-        ("Superstructure", 2),
-        ("Roofing", 3),
-        ("Finishing", 4),
-        ("Handover", 5),
-    ]
-    for name, order in default_milestones:
-        milestone = Milestone(
-            id=new_id(),
-            project_id=project_id,
-            name=name,
-            order_index=order,
-            status="pending",
+    stages = []
+    if workflow_template_id:
+        from app.modules.project_types.models import WorkflowStage
+        result = await db.execute(
+            select(WorkflowStage)
+            .where(WorkflowStage.workflow_template_id == workflow_template_id)
+            .order_by(WorkflowStage.order_index)
         )
-        db.add(milestone)
+        stages = result.scalars().all()
+
+    if stages:
+        for stage in stages:
+            milestone = Milestone(
+                id=new_id(),
+                project_id=project_id,
+                name=stage.name,
+                order_index=stage.order_index,
+                status="pending",
+                workflow_stage_id=stage.id,
+            )
+            db.add(milestone)
+    else:
+        # Default PRD milestone names
+        default_milestones = [
+            ("Pre-Construction", 1),
+            ("Foundation", 2),
+            ("Superstructure", 3),
+            ("Building Envelope", 4),
+            ("Practical Completion", 5),
+        ]
+        for name, order in default_milestones:
+            milestone = Milestone(
+                id=new_id(),
+                project_id=project_id,
+                name=name,
+                order_index=order,
+                status="pending",
+            )
+            db.add(milestone)
     await db.flush()
 
 
