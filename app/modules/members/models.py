@@ -11,12 +11,16 @@ class DeveloperMember(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     developer_id: Mapped[str] = mapped_column(String, ForeignKey("developers.id"), nullable=False, index=True)
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     org_role: Mapped[str] = mapped_column(String(50), nullable=False, default="member")  # owner, admin, member
     invited_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     invited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     joined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    invitation_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    invitation_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    invitation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")  # pending, active, suspended, revoked
+    invited_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (UniqueConstraint("developer_id", "user_id", name="uq_developer_member"),)

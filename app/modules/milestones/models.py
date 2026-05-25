@@ -22,3 +22,15 @@ class Milestone(Base):
     workflow_stage_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_stages.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class MilestoneApproval(Base):
+    __tablename__ = "milestone_approvals"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    milestone_id: Mapped[str] = mapped_column(String, ForeignKey("milestones.id", ondelete="CASCADE"), nullable=False, index=True)
+    buyer_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)  # approved | rejected
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

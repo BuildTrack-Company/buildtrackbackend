@@ -254,3 +254,50 @@ async def register_buyer_by_invitation(
         max_age=14 * 24 * 60 * 60,
     )
     return response
+
+
+@router.post("/accept-invitation/{token}", status_code=201)
+async def accept_member_invitation(
+    token: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.members.schemas import AcceptInvitationRequest
+    from pydantic import ValidationError as PydanticValidationError
+    import json
+
+    try:
+        body = await request.json()
+        req = AcceptInvitationRequest(**body)
+    except Exception:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Request body must include full_name and password")
+
+    from app.modules.members.service import accept_invitation as _accept
+    result = await _accept(db, token, req.full_name, req.password)
+
+    # Find the user to issue tokens
+    from app.modules.auth.models import User
+    from sqlalchemy import select
+    user = (await db.execute(select(User).where(User.id == result["user_id"]))).scalar_one_or_none() if result.get("user_id") else None
+
+    if not user:
+        return ok({"message": "Invitation accepted. Please log in with your credentials."}, request=request)
+
+    tokens = await service.create_tokens(user)
+    response_data = {
+        "user": schemas.UserResponse.model_validate(user).model_dump(),
+        "access_token": tokens["access_token"],
+        "token_type": "bearer",
+        "expires_in": tokens["expires_in"],
+    }
+    response = JSONResponse(content=ok(response_data, request=request), status_code=201)
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=14 * 24 * 60 * 60,
+    )
+    return response

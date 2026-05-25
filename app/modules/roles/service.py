@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.modules.roles.models import Permission, Role, RolePermission, UserRoleAssignment
 from app.modules.auth.models import User
 from app.shared.ids import new_id
-from app.core.exceptions import NotFoundError, DuplicateError
+from app.core.exceptions import NotFoundError, DuplicateError, ForbiddenError, ValidationError
 
 
 async def list_roles(db: AsyncSession) -> List[dict]:
@@ -65,7 +65,64 @@ async def create_role(db: AsyncSession, name: str, description: Optional[str], p
     return {"id": role.id, "name": role.name, "description": role.description, "is_system": role.is_system, "permissions": perms}
 
 
-async def assign_role(db: AsyncSession, user_id: str, role_id: str, developer_id: Optional[str], granted_by: str, expires_at: Optional[datetime]) -> dict:
+async def update_role(db: AsyncSession, role_id: str, name: Optional[str], description: Optional[str], is_admin: bool = False) -> dict:
+    role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()
+    if not role:
+        raise NotFoundError("Role not found")
+    if role.is_system and not is_admin:
+        raise ForbiddenError("System roles are immutable for tenants")
+    now = datetime.now(timezone.utc)
+    if name is not None:
+        role.name = name
+    if description is not None:
+        role.description = description
+    role.updated_at = now
+    await db.commit()
+    perms = await _get_role_permissions(db, role.id)
+    return {"id": role.id, "name": role.name, "description": role.description, "is_system": role.is_system, "permissions": perms}
+
+
+async def delete_role(db: AsyncSession, role_id: str, is_admin: bool = False) -> None:
+    role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()
+    if not role:
+        raise NotFoundError("Role not found")
+    if role.is_system and not is_admin:
+        raise ForbiddenError("System roles cannot be deleted by tenants")
+    # Check for active assignments
+    assignments = (await db.execute(select(UserRoleAssignment).where(UserRoleAssignment.role_id == role_id))).scalars().all()
+    if assignments:
+        raise ValidationError(
+            "Role is still assigned to one or more users — revoke all assignments first",
+            {"code": "ROLE_IN_USE"},
+        )
+    await db.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+    await db.delete(role)
+    await db.commit()
+
+
+async def set_role_permissions(db: AsyncSession, role_id: str, permission_ids: List[str], is_admin: bool = False) -> dict:
+    role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()
+    if not role:
+        raise NotFoundError("Role not found")
+    if role.is_system and not is_admin:
+        raise ForbiddenError("System role permissions are immutable for tenants")
+
+    now = datetime.now(timezone.utc)
+    await db.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+    await db.flush()
+
+    for perm_id in permission_ids:
+        perm = (await db.execute(select(Permission).where(Permission.id == perm_id))).scalar_one_or_none()
+        if not perm:
+            raise NotFoundError(f"Permission '{perm_id}' not found")
+        db.add(RolePermission(id=new_id(), role_id=role_id, permission_id=perm_id, created_at=now))
+
+    await db.commit()
+    perms = await _get_role_permissions(db, role_id)
+    return {"id": role.id, "name": role.name, "description": role.description, "is_system": role.is_system, "permissions": perms}
+
+
+async def assign_role(db: AsyncSession, user_id: str, role_id: str, developer_id: Optional[str], granted_by: str, expires_at) -> dict:
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if not user:
@@ -88,14 +145,8 @@ async def assign_role(db: AsyncSession, user_id: str, role_id: str, developer_id
 
     now = datetime.now(timezone.utc)
     assignment = UserRoleAssignment(
-        id=new_id(),
-        user_id=user_id,
-        role_id=role_id,
-        developer_id=developer_id,
-        granted_by=granted_by,
-        granted_at=now,
-        expires_at=expires_at,
-        created_at=now,
+        id=new_id(), user_id=user_id, role_id=role_id, developer_id=developer_id,
+        granted_by=granted_by, granted_at=now, expires_at=expires_at, created_at=now,
     )
     db.add(assignment)
     await db.commit()

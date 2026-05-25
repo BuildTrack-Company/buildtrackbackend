@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.deps import require_developer, get_tenant_context, TenantContext
 from app.modules.auth.models import User
 from app.modules.projects import service, schemas
+from app.modules.projects import workflow_service
 from app.shared.response import ok
 from app.shared.audit import log_action
 
@@ -123,3 +125,78 @@ async def lookup_project_by_code(
 ):
     project = await service.get_project_by_code(db, code)
     return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
+
+
+# ─── Workflow runtime ────────────────────────────────────────────────────────
+
+@router.get("/projects/{project_id}/workflow")
+async def get_project_workflow(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await workflow_service.get_project_workflow(
+        db, project_id, ctx.developer_id, ctx.user_id, ctx.role
+    )
+    return ok(data, request=request)
+
+
+@router.get("/projects/{project_id}/workflow/next-stages")
+async def get_workflow_next_stages(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await workflow_service.get_next_stages(
+        db, project_id, ctx.developer_id, ctx.user_id, ctx.role
+    )
+    return ok(data, request=request)
+
+
+@router.get("/projects/{project_id}/workflow/history")
+async def get_workflow_history(
+    project_id: str,
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await workflow_service.get_workflow_history(
+        db, project_id, ctx.developer_id, ctx.user_id, ctx.role, page, limit
+    )
+    return ok(data, request=request)
+
+
+class AdvanceWorkflowRequest(BaseModel):
+    to_stage_id: str
+    notes: Optional[str] = None
+
+
+@router.post("/projects/{project_id}/workflow/advance")
+async def advance_project_workflow(
+    project_id: str,
+    req: AdvanceWorkflowRequest,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+):
+    if not idempotency_key:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Idempotency-Key header is required")
+
+    data = await workflow_service.advance_workflow(
+        db,
+        project_id,
+        ctx.developer_id,
+        ctx.user_id,
+        ctx.role,
+        req.to_stage_id,
+        req.notes,
+        idempotency_key,
+        getattr(request.state, "request_id", None),
+    )
+    return ok(data, request=request)

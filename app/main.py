@@ -42,7 +42,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.billing.router import router as billing_router
 from app.modules.webhooks.router import router as webhooks_router
 from app.modules.internal.router import router as internal_router
-from app.modules.project_types.router import router as project_types_router
+from app.modules.project_types.router import router as project_types_router, admin_router as project_types_admin_router
 from app.modules.roles.router import router as roles_router
 from app.modules.members.router import router as members_router
 from app.modules.settings.router import router as settings_router
@@ -61,6 +61,7 @@ app.include_router(billing_router, prefix=API_PREFIX)
 app.include_router(webhooks_router, prefix=API_PREFIX)
 app.include_router(internal_router, prefix=API_PREFIX)
 app.include_router(project_types_router, prefix=API_PREFIX)
+app.include_router(project_types_admin_router, prefix=API_PREFIX)
 app.include_router(roles_router, prefix=API_PREFIX)
 app.include_router(members_router, prefix=API_PREFIX)
 app.include_router(settings_router, prefix=API_PREFIX)

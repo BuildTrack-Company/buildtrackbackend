@@ -45,3 +45,12 @@ class RoleCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     permission_ids: List[str] = []
+
+
+class RoleUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RolePermissionsRequest(BaseModel):
+    permissions: List[str]  # list of permission_ids
