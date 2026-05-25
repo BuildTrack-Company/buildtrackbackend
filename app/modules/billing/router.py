@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import require_developer, get_tenant_context, TenantContext
+from app.core.deps import require_developer, get_tenant_context, TenantContext, require_permission
 from app.modules.billing import schemas, service
 from app.shared.response import ok
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
 
-@router.get("/tier-limits")
+@router.get("/tier-limits", dependencies=[require_permission("billing", "read")])
 async def get_my_tier_limits(
     request: Request,
     ctx: TenantContext = Depends(get_tenant_context),

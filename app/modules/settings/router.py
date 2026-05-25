@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Optional
 from pydantic import BaseModel
 from app.core.database import get_db
-from app.core.deps import require_admin, get_tenant_context, TenantContext
+from app.core.deps import require_admin, get_tenant_context, TenantContext, require_permission
 from app.modules.settings import service
 from app.shared.response import ok
 from app.core.exceptions import ForbiddenError, NotFoundError
@@ -20,14 +20,14 @@ class SystemSettingRequest(BaseModel):
     description: Optional[str] = None
 
 
-@router.get("/settings")
+@router.get("/settings", dependencies=[require_permission("settings", "read")])
 async def get_tenant_settings(db: AsyncSession = Depends(get_db), ctx: TenantContext = Depends(get_tenant_context)):
     if not ctx.developer_id:
         raise ForbiddenError("Developer access required")
     return ok(await service.get_tenant_settings(db, ctx.developer_id))
 
 
-@router.get("/settings/{key}")
+@router.get("/settings/{key}", dependencies=[require_permission("settings", "read")])
 async def get_tenant_setting(key: str, db: AsyncSession = Depends(get_db), ctx: TenantContext = Depends(get_tenant_context)):
     if not ctx.developer_id:
         raise ForbiddenError("Developer access required")
@@ -38,14 +38,14 @@ async def get_tenant_setting(key: str, db: AsyncSession = Depends(get_db), ctx: 
     return ok(match)
 
 
-@router.put("/settings/{key}")
+@router.put("/settings/{key}", dependencies=[require_permission("settings", "update")])
 async def update_tenant_setting(key: str, req: SystemSettingRequest, db: AsyncSession = Depends(get_db), ctx: TenantContext = Depends(get_tenant_context)):
     if not ctx.developer_id:
         raise ForbiddenError("Developer access required")
     return ok(await service.update_tenant_setting(db, ctx.developer_id, key, req.value, ctx.user_id))
 
 
-@router.put("/settings")
+@router.put("/settings", dependencies=[require_permission("settings", "update")])
 async def bulk_update_settings(req: BulkSettingsRequest, db: AsyncSession = Depends(get_db), ctx: TenantContext = Depends(get_tenant_context)):
     if not ctx.developer_id:
         raise ForbiddenError("Developer access required")

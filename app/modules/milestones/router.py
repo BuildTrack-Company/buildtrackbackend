@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_tenant_context, TenantContext
+from app.core.deps import get_tenant_context, TenantContext, require_permission
 from app.modules.milestones import service, schemas
 from app.shared.response import ok
 from app.shared.audit import log_action
@@ -10,7 +10,7 @@ from app.shared.audit import log_action
 router = APIRouter(tags=["milestones"])
 
 
-@router.get("/projects/{project_id}/milestones")
+@router.get("/projects/{project_id}/milestones", dependencies=[require_permission("milestones", "read")])
 async def list_milestones(
     project_id: str,
     request: Request,
@@ -21,7 +21,7 @@ async def list_milestones(
     return ok([schemas.MilestoneResponse.model_validate(m).model_dump() for m in milestones], request=request)
 
 
-@router.patch("/projects/{project_id}/milestones/{milestone_id}")
+@router.patch("/projects/{project_id}/milestones/{milestone_id}", dependencies=[require_permission("milestones", "update")])
 async def update_milestone(
     project_id: str,
     milestone_id: str,
@@ -34,7 +34,7 @@ async def update_milestone(
     return ok(schemas.MilestoneResponse.model_validate(milestone).model_dump(), request=request)
 
 
-@router.post("/projects/{project_id}/milestones/{milestone_id}/complete")
+@router.post("/projects/{project_id}/milestones/{milestone_id}/complete", dependencies=[require_permission("milestones", "update")])
 async def complete_milestone(
     project_id: str,
     milestone_id: str,
@@ -60,7 +60,7 @@ async def complete_milestone(
     return ok(schemas.MilestoneResponse.model_validate(milestone).model_dump(), request=request)
 
 
-@router.post("/projects/{project_id}/milestones/{milestone_id}/delay")
+@router.post("/projects/{project_id}/milestones/{milestone_id}/delay", dependencies=[require_permission("milestones", "update")])
 async def delay_milestone(
     project_id: str,
     milestone_id: str,

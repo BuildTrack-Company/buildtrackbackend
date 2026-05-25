@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_tenant_context, TenantContext, require_buyer, get_current_user
+from app.core.deps import get_tenant_context, TenantContext, require_buyer, get_current_user, require_permission
 from app.modules.auth.models import User
 from app.modules.buyers import service, schemas
 from app.shared.response import ok
@@ -10,7 +10,7 @@ from app.shared.response import ok
 router = APIRouter(tags=["buyers"])
 
 
-@router.get("/projects/{project_id}/buyers")
+@router.get("/projects/{project_id}/buyers", dependencies=[require_permission("buyers", "read")])
 async def list_buyers(
     project_id: str,
     request: Request,
@@ -21,7 +21,7 @@ async def list_buyers(
     return ok([schemas.BuyerResponse.model_validate(b).model_dump() for b in buyers], request=request)
 
 
-@router.post("/projects/{project_id}/buyers/invite", status_code=201)
+@router.post("/projects/{project_id}/buyers/invite", status_code=201, dependencies=[require_permission("buyers", "create")])
 async def invite_buyer(
     project_id: str,
     req: schemas.BuyerInviteRequest,
@@ -33,7 +33,7 @@ async def invite_buyer(
     return ok(schemas.BuyerResponse.model_validate(buyer).model_dump(), request=request)
 
 
-@router.post("/projects/{project_id}/buyers/bulk-invite", status_code=201)
+@router.post("/projects/{project_id}/buyers/bulk-invite", status_code=201, dependencies=[require_permission("buyers", "create")])
 async def bulk_invite_buyers(
     project_id: str,
     req: schemas.BulkInviteRequest,
@@ -51,7 +51,7 @@ async def bulk_invite_buyers(
     )
 
 
-@router.post("/projects/{project_id}/buyers/{buyer_id}/resend")
+@router.post("/projects/{project_id}/buyers/{buyer_id}/resend", dependencies=[require_permission("buyers", "create")])
 async def resend_invitation(
     project_id: str,
     buyer_id: str,
@@ -63,7 +63,7 @@ async def resend_invitation(
     return ok(schemas.BuyerResponse.model_validate(buyer).model_dump(), request=request)
 
 
-@router.delete("/projects/{project_id}/buyers/{buyer_id}", status_code=204)
+@router.delete("/projects/{project_id}/buyers/{buyer_id}", status_code=204, dependencies=[require_permission("buyers", "delete")])
 async def remove_buyer(
     project_id: str,
     buyer_id: str,

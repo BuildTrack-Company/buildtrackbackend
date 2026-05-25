@@ -4,7 +4,7 @@ from typing import Optional
 import structlog
 
 from app.core.database import get_db
-from app.core.deps import get_tenant_context, TenantContext
+from app.core.deps import get_tenant_context, TenantContext, require_permission
 from app.core.exceptions import NotFoundError
 from app.modules.uploads import service, schemas
 from app.modules.uploads.models import Upload
@@ -17,7 +17,7 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(tags=["uploads"])
 
 
-@router.post("/uploads/sessions")
+@router.post("/uploads/sessions", dependencies=[require_permission("photos", "upload")])
 async def create_upload_session(
     req: schemas.UploadSessionRequest,
     request: Request,
@@ -28,7 +28,7 @@ async def create_upload_session(
     return ok(result, request=request)
 
 
-@router.post("/uploads", status_code=201)
+@router.post("/uploads", status_code=201, dependencies=[require_permission("photos", "upload")])
 async def finalize_upload(
     req: schemas.FinalizeUploadRequest,
     request: Request,
@@ -56,7 +56,7 @@ async def finalize_upload(
     return ok(schemas.UploadResponse.model_validate(upload).model_dump(), request=request)
 
 
-@router.post("/uploads/{upload_id}/resend-emails")
+@router.post("/uploads/{upload_id}/resend-emails", dependencies=[require_permission("buyers", "notify")])
 async def resend_upload_emails(
     upload_id: str,
     request: Request,
@@ -64,7 +64,6 @@ async def resend_upload_emails(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    """Re-trigger notification fan-out for an upload. Use when initial delivery failed."""
     from sqlalchemy import select
     result = await db.execute(
         select(Upload).where(Upload.id == upload_id, Upload.developer_id == ctx.developer_id)
@@ -78,7 +77,6 @@ async def resend_upload_emails(
 
 
 async def _fanout_notifications(upload_id: str):
-    """Background task to fan out upload notifications to buyers."""
     try:
         from app.modules.notifications.service import fanout_upload_notifications
         from app.core.database import async_session_factory
@@ -88,7 +86,7 @@ async def _fanout_notifications(upload_id: str):
         logger.error("fanout_failed", upload_id=upload_id, error=str(e))
 
 
-@router.get("/projects/{project_id}/uploads")
+@router.get("/projects/{project_id}/uploads", dependencies=[require_permission("photos", "read")])
 async def list_uploads(
     project_id: str,
     request: Request,
@@ -104,7 +102,7 @@ async def list_uploads(
     )
 
 
-@router.get("/uploads/{upload_id}")
+@router.get("/uploads/{upload_id}", dependencies=[require_permission("photos", "read")])
 async def get_upload(
     upload_id: str,
     request: Request,
@@ -124,7 +122,7 @@ async def get_upload(
     return ok(upload_data, request=request)
 
 
-@router.get("/uploads/{upload_id}/whatsapp-draft")
+@router.get("/uploads/{upload_id}/whatsapp-draft", dependencies=[require_permission("buyers", "notify")])
 async def get_whatsapp_draft(
     upload_id: str,
     request: Request,

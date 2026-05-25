@@ -5,7 +5,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.deps import require_developer, get_tenant_context, TenantContext
+from app.core.deps import require_developer, get_tenant_context, TenantContext, require_permission
 from app.modules.auth.models import User
 from app.modules.projects import service, schemas
 from app.modules.projects import workflow_service
@@ -15,7 +15,7 @@ from app.shared.audit import log_action
 router = APIRouter(tags=["projects"])
 
 
-@router.get("/projects")
+@router.get("/projects", dependencies=[require_permission("projects", "read")])
 async def list_projects(
     request: Request,
     ctx: TenantContext = Depends(get_tenant_context),
@@ -25,7 +25,7 @@ async def list_projects(
     return ok([schemas.ProjectResponse.model_validate(p).model_dump() for p in projects], request=request)
 
 
-@router.post("/projects", status_code=201)
+@router.post("/projects", status_code=201, dependencies=[require_permission("projects", "create")])
 async def create_project(
     req: schemas.ProjectCreate,
     request: Request,
@@ -49,7 +49,7 @@ async def create_project(
     return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
 
 
-@router.get("/projects/{project_id}")
+@router.get("/projects/{project_id}", dependencies=[require_permission("projects", "read")])
 async def get_project(
     project_id: str,
     request: Request,
@@ -71,7 +71,7 @@ async def get_project(
     return ok(project_data, request=request)
 
 
-@router.patch("/projects/{project_id}")
+@router.patch("/projects/{project_id}", dependencies=[require_permission("projects", "update")])
 async def update_project(
     project_id: str,
     req: schemas.ProjectUpdate,
@@ -96,7 +96,7 @@ async def update_project(
     return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
 
 
-@router.delete("/projects/{project_id}", status_code=204)
+@router.delete("/projects/{project_id}", status_code=204, dependencies=[require_permission("projects", "delete")])
 async def delete_project(
     project_id: str,
     request: Request,
@@ -129,7 +129,7 @@ async def lookup_project_by_code(
 
 # ─── Workflow runtime ────────────────────────────────────────────────────────
 
-@router.get("/projects/{project_id}/workflow")
+@router.get("/projects/{project_id}/workflow", dependencies=[require_permission("workflow", "read")])
 async def get_project_workflow(
     project_id: str,
     request: Request,
@@ -142,7 +142,7 @@ async def get_project_workflow(
     return ok(data, request=request)
 
 
-@router.get("/projects/{project_id}/workflow/next-stages")
+@router.get("/projects/{project_id}/workflow/next-stages", dependencies=[require_permission("workflow", "read")])
 async def get_workflow_next_stages(
     project_id: str,
     request: Request,
@@ -155,7 +155,7 @@ async def get_workflow_next_stages(
     return ok(data, request=request)
 
 
-@router.get("/projects/{project_id}/workflow/history")
+@router.get("/projects/{project_id}/workflow/history", dependencies=[require_permission("workflow", "read")])
 async def get_workflow_history(
     project_id: str,
     request: Request,
@@ -175,7 +175,7 @@ class AdvanceWorkflowRequest(BaseModel):
     notes: Optional[str] = None
 
 
-@router.post("/projects/{project_id}/workflow/advance")
+@router.post("/projects/{project_id}/workflow/advance", dependencies=[require_permission("workflow", "advance")])
 async def advance_project_workflow(
     project_id: str,
     req: AdvanceWorkflowRequest,

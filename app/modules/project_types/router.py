@@ -6,7 +6,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.deps import require_admin, get_current_user, get_tenant_context, TenantContext
+from app.core.deps import require_admin, get_current_user, get_tenant_context, TenantContext, require_permission
 from app.modules.project_types import service
 from app.modules.project_types.models import ProjectType, WorkflowTemplate, WorkflowStage, WorkflowTransition
 from app.shared.response import ok
@@ -62,7 +62,7 @@ class WorkflowTemplateUpdate(BaseModel):
 
 # ─── Tenant project type routes ───────────────────────────────────────────────
 
-@router.get("")
+@router.get("", dependencies=[require_permission("project_types", "read")])
 async def list_project_types(
     db: AsyncSession = Depends(get_db),
     ctx: TenantContext = Depends(get_tenant_context),
@@ -70,7 +70,7 @@ async def list_project_types(
     return ok(await service.list_project_types(db, ctx.developer_id))
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[require_permission("project_types", "manage")])
 async def create_project_type(
     req: ProjectTypeCreate,
     db: AsyncSession = Depends(get_db),
@@ -81,7 +81,7 @@ async def create_project_type(
     return ok(await service.create_project_type(db, ctx.developer_id, req.name, req.description))
 
 
-@router.patch("/{type_id}")
+@router.patch("/{type_id}", dependencies=[require_permission("project_types", "manage")])
 async def update_project_type(
     type_id: str,
     req: ProjectTypeUpdate,
@@ -91,7 +91,7 @@ async def update_project_type(
     return ok(await service.update_project_type(db, type_id, ctx.developer_id, req.name, req.description))
 
 
-@router.delete("/{type_id}", status_code=204)
+@router.delete("/{type_id}", status_code=204, dependencies=[require_permission("project_types", "manage")])
 async def delete_project_type(
     type_id: str,
     db: AsyncSession = Depends(get_db),
@@ -102,7 +102,7 @@ async def delete_project_type(
 
 # ─── Workflow template routes (specific paths before /{template_id}) ──────────
 
-@router.get("/templates/project-type/{project_type_id}/default")
+@router.get("/templates/project-type/{project_type_id}/default", dependencies=[require_permission("project_types", "read")])
 async def get_default_template_for_type(
     project_type_id: str,
     db: AsyncSession = Depends(get_db),
@@ -114,7 +114,7 @@ async def get_default_template_for_type(
     return ok(data)
 
 
-@router.get("/templates")
+@router.get("/templates", dependencies=[require_permission("project_types", "read")])
 async def list_workflow_templates(
     project_type_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -123,7 +123,7 @@ async def list_workflow_templates(
     return ok(await service.list_workflow_templates(db, ctx.developer_id, project_type_id))
 
 
-@router.post("/templates", status_code=201)
+@router.post("/templates", status_code=201, dependencies=[require_permission("project_types", "manage")])
 async def create_workflow_template(
     req: WorkflowTemplateCreate,
     db: AsyncSession = Depends(get_db),
@@ -137,7 +137,7 @@ async def create_workflow_template(
     ))
 
 
-@router.post("/templates/{template_id}/duplicate", status_code=201)
+@router.post("/templates/{template_id}/duplicate", status_code=201, dependencies=[require_permission("project_types", "manage")])
 async def duplicate_workflow_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
@@ -148,7 +148,7 @@ async def duplicate_workflow_template(
     return ok(await service.duplicate_workflow_template(db, template_id, ctx.developer_id))
 
 
-@router.get("/templates/{template_id}/stages")
+@router.get("/templates/{template_id}/stages", dependencies=[require_permission("project_types", "read")])
 async def get_template_stages(
     template_id: str,
     db: AsyncSession = Depends(get_db),
@@ -160,7 +160,7 @@ async def get_template_stages(
     return ok(data)
 
 
-@router.get("/templates/{template_id}/transitions")
+@router.get("/templates/{template_id}/transitions", dependencies=[require_permission("project_types", "read")])
 async def get_template_transitions(
     template_id: str,
     db: AsyncSession = Depends(get_db),
@@ -172,7 +172,7 @@ async def get_template_transitions(
     return ok(data)
 
 
-@router.get("/templates/{template_id}")
+@router.get("/templates/{template_id}", dependencies=[require_permission("project_types", "read")])
 async def get_workflow_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),
@@ -184,7 +184,7 @@ async def get_workflow_template(
     return ok(data)
 
 
-@router.put("/templates/{template_id}")
+@router.put("/templates/{template_id}", dependencies=[require_permission("project_types", "manage")])
 async def update_workflow_template(
     template_id: str,
     req: WorkflowTemplateUpdate,
@@ -198,7 +198,7 @@ async def update_workflow_template(
     ))
 
 
-@router.delete("/templates/{template_id}", status_code=204)
+@router.delete("/templates/{template_id}", status_code=204, dependencies=[require_permission("project_types", "manage")])
 async def delete_workflow_template(
     template_id: str,
     db: AsyncSession = Depends(get_db),

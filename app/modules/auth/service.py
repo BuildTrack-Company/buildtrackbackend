@@ -49,6 +49,22 @@ async def register_developer(db: AsyncSession, req: RegisterDeveloperRequest) ->
     db.add(developer)
     await db.flush()
 
+    # Create DeveloperMember record for the owner so RBAC context is resolvable
+    from app.modules.members.models import DeveloperMember
+    owner_member = DeveloperMember(
+        id=new_id(),
+        developer_id=developer.id,
+        user_id=user.id,
+        org_role="owner",
+        invited_by=user.id,
+        invited_at=datetime.now(timezone.utc),
+        joined_at=datetime.now(timezone.utc),
+        is_active=True,
+        invitation_status="active",
+    )
+    db.add(owner_member)
+    await db.flush()
+
     await db.commit()
 
     # Send welcome email (non-blocking)
