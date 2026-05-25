@@ -228,6 +228,45 @@ async def register_buyer_by_code(
     return response
 
 
+@router.get("/invitation/{token}")
+async def get_member_invitation_info(
+    token: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.members.models import DeveloperMember
+    from app.modules.developers.models import Developer
+    from sqlalchemy import select
+    from datetime import timezone, datetime
+
+    member = (await db.execute(
+        select(DeveloperMember).where(DeveloperMember.invitation_token == token)
+    )).scalar_one_or_none()
+
+    if not member:
+        from app.core.exceptions import NotFoundError
+        raise NotFoundError("Invitation not found or already used")
+    if member.invitation_status == "revoked":
+        from app.core.exceptions import ValidationError as BtValidationError
+        raise BtValidationError("This invitation has been revoked", {"code": "INVITATION_REVOKED"})
+    if member.invitation_status != "pending":
+        from app.core.exceptions import ValidationError as BtValidationError
+        raise BtValidationError("This invitation has already been accepted", {"code": "INVITATION_ALREADY_ACCEPTED"})
+    if member.invitation_token_expires_at and datetime.now(timezone.utc) > member.invitation_token_expires_at:
+        from app.core.exceptions import ValidationError as BtValidationError
+        raise BtValidationError("This invitation has expired", {"code": "INVITATION_EXPIRED"})
+
+    developer = (await db.execute(
+        select(Developer).where(Developer.id == member.developer_id)
+    )).scalar_one_or_none()
+
+    return ok({
+        "email": member.invited_email,
+        "org_role": member.org_role,
+        "developer_name": developer.company_name if developer else None,
+    }, request=request)
+
+
 @router.post("/register/buyer-by-invitation/{token}")
 async def register_buyer_by_invitation(
     token: str,
