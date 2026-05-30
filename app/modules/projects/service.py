@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,11 +9,30 @@ from app.modules.projects.schemas import ProjectCreate, ProjectUpdate
 from app.core.exceptions import NotFoundError, ForbiddenError
 from app.shared.ids import new_id
 from app.shared.code_gen import generate_project_code
-from app.shared.quotas import assert_can_create_project
+from app.shared.quotas import assert_can_create_project, assert_within_unit_capacity
+
+
+def _slugify(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return s or "project"
+
+
+async def generate_unique_slug(db: AsyncSession, name: str) -> str:
+    """Kebab-case slug from the project name, with a collision check."""
+    base = _slugify(name)
+    candidate = base
+    n = 2
+    while True:
+        existing = await db.execute(select(Project.id).where(Project.slug == candidate))
+        if not existing.scalar_one_or_none():
+            return candidate
+        candidate = f"{base}-{n}"
+        n += 1
 
 
 async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate) -> Project:
     await assert_can_create_project(db, developer_id)
+    await assert_within_unit_capacity(db, developer_id, req.total_units)
 
     # Generate unique project code
     for _ in range(10):
@@ -20,6 +40,8 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         result = await db.execute(select(Project).where(Project.project_code == code))
         if not result.scalar_one_or_none():
             break
+
+    slug = await generate_unique_slug(db, req.name)
 
     # Resolve workflow template
     workflow_template_id = req.workflow_template_id
@@ -35,6 +57,7 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         id=new_id(),
         developer_id=developer_id,
         project_code=code,
+        slug=slug,
         name=req.name,
         description=req.description,
         location_name=req.location_name,

@@ -23,6 +23,7 @@ from app.modules.buyers.models import Buyer
 from app.modules.notifications.models import NotificationLog
 from app.modules.admin.models import AuditLog, AdminIpAllowlist
 from app.modules.webhooks.models import WebhookEvent
+from app.modules.inquiries.models import Inquiry, VisibilityPageView
 
 config = context.config
 

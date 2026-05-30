@@ -16,9 +16,16 @@ class Upload(Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     upload_session_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # ── Construction Update fields (brief Section 7 ConstructionUpdate) ──────
+    # In domain language, an Upload IS a Construction Update.
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    progress_at_upload: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100
     capture_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     capture_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     accuracy_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    distance_from_site_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # server-validated
+    within_boundary: Mapped[bool] = mapped_column(Boolean, default=False)  # server-validated within 100m
     gps_validated: Mapped[bool] = mapped_column(Boolean, default=False)
     photo_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, processing, complete, flagged

@@ -14,6 +14,7 @@ from app.shared.ids import new_id
 from app.shared.geo import haversine_metres
 from app.shared.storage import get_signed_upload_params, get_signed_url
 from app.shared.quotas import assert_can_upload_photos
+from app.shared.audit import log_action
 
 logger = structlog.get_logger(__name__)
 
@@ -129,7 +130,11 @@ async def finalize_upload(
     if not project:
         raise NotFoundError("Project not found")
 
-    gps_validated = True
+    # ── SERVER-SIDE GPS VALIDATION (brief Section 5.1, defense in depth) ─────
+    # The capture coordinate is the security boundary, re-validated here at
+    # finalize. Outside the boundary is a hard reject with an audit-log record.
+    distance = None
+    within_boundary = True
     if project.site_latitude and project.site_longitude:
         distance = haversine_metres(
             req.capture_latitude, req.capture_longitude,
@@ -137,12 +142,29 @@ async def finalize_upload(
         )
         allowed_radius = project.gps_radius_metres + GPS_DISTANCE_BUFFER
         if distance > allowed_radius:
-            gps_validated = False
-            logger.warning(
-                "gps_validation_failed_on_finalize",
-                distance=distance,
-                allowed=allowed_radius,
-                upload_session=req.session_id,
+            within_boundary = False
+            await log_action(
+                db,
+                actor_user_id=developer_id,
+                actor_role="developer",
+                action="upload.rejected.gps_outside_boundary",
+                entity_type="upload_attempt",
+                entity_id=req.project_id,
+                developer_id=developer_id,
+                after={
+                    "distance_m": round(distance),
+                    "radius_m": project.gps_radius_metres,
+                    "capture_lat": req.capture_latitude,
+                    "capture_lng": req.capture_longitude,
+                },
+            )
+            raise GPSRejectedError(
+                f"Upload coordinates are {distance:.0f}m from site (limit: {project.gps_radius_metres:.0f}m)",
+                {
+                    "code": "GPS_OUTSIDE_BOUNDARY",
+                    "distance_m": round(distance),
+                    "radius_m": project.gps_radius_metres,
+                },
             )
 
     upload = Upload(
@@ -153,13 +175,18 @@ async def finalize_upload(
         idempotency_key=idempotency_key,
         upload_session_id=req.session_id,
         caption=req.caption,
+        title=getattr(req, "title", None),
+        category=getattr(req, "category", None),
+        progress_at_upload=getattr(req, "progress_at_upload", None),
         capture_latitude=req.capture_latitude,
         capture_longitude=req.capture_longitude,
         accuracy_m=req.accuracy_m,
-        gps_validated=gps_validated,
+        distance_from_site_m=distance,
+        within_boundary=within_boundary,
+        gps_validated=True,
         photo_count=len(req.photos),
         status="pending_review",
-        flag_reason=None if gps_validated else "GPS validation failed on finalize",
+        flag_reason=None,
     )
     db.add(upload)
     await db.flush()
