@@ -43,6 +43,15 @@ class ProjectResponse(BaseModel):
     cover_image_url: Optional[str]
     estimated_completion: Optional[datetime]
     is_public: bool
+    slug: Optional[str] = None
+    visibility_description: Optional[str] = None
+    visibility_tagline: Optional[str] = None
+    starting_price: Optional[str] = None
+    construction_progress: int = 0
+    health_status: str = "on_schedule"
+    activity_overdue_threshold_days: int = 14
+    visibility_page_views: int = 0
+    visibility_page_published: bool = False
     project_type_id: Optional[str]
     workflow_template_id: Optional[str]
     current_stage_id: Optional[str]

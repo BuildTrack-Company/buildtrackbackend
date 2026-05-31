@@ -95,10 +95,23 @@ async def list_projects(
     )
     projects = result.scalars().all()
     count = (await db.execute(select(func.count()).select_from(Project).where(Project.deleted_at.is_(None)))).scalar_one()
-    return paginated(
-        [ProjectResponse.model_validate(p).model_dump() for p in projects],
-        count, page, limit, request=request,
-    )
+
+    # Enrich each project with developer name + tier + subscription + buyer count
+    from app.modules.developers.models import Developer
+    from app.modules.buyers.models import Buyer
+    rows = []
+    for p in projects:
+        data = ProjectResponse.model_validate(p).model_dump()
+        dev = (await db.execute(select(Developer).where(Developer.id == p.developer_id))).scalar_one_or_none()
+        data["developer_name"] = dev.company_name if dev else None
+        data["subscription_tier"] = dev.subscription_tier if dev else None
+        data["subscription_status"] = dev.subscription_status if dev else None
+        data["buyer_count"] = (await db.execute(
+            select(func.count()).select_from(Buyer).where(Buyer.project_id == p.id, Buyer.deleted_at.is_(None))
+        )).scalar_one()
+        rows.append(data)
+
+    return paginated(rows, count, page, limit, request=request)
 
 
 @router.get("/buyers")
