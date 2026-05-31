@@ -1,8 +1,8 @@
 # Role-based end-to-end test results
 
-_Generated 2026-05-31T19:43:06 against http://127.0.0.1:8000_
+_Generated 2026-05-31T22:20:22 against http://127.0.0.1:8000_
 
-**33/33 checks passed**
+**37/37 checks passed**
 
 | Role | Check | Result | Detail |
 |---|---|---|---|
@@ -24,12 +24,16 @@ _Generated 2026-05-31T19:43:06 against http://127.0.0.1:8000_
 | developer | site-visit inbox | PASS |  |
 | developer | tier limits | PASS |  |
 | developer | list own projects | PASS |  |
+| developer | create document | PASS | status=201 |
+| developer | list documents | PASS |  |
+| developer | confirm site visit | PASS | status=200 |
 | manager | login | PASS |  |
 | manager | can view projects | PASS |  |
 | manager | invite buyer forbidden | PASS | status=403 |
 | buyer | login | PASS |  |
 | buyer | view own project | PASS |  |
 | buyer | pending approvals | PASS |  |
+| buyer | view documents | PASS |  |
 | buyer | request site visit | PASS | status=201 |
 | buyer | create project forbidden | PASS |  |
 | public | directory | PASS |  |

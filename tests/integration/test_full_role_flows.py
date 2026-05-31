@@ -99,6 +99,22 @@ def main():
             # own projects only
             r = c.get(f"{BASE}/v1/projects", headers=h)
             check("developer", "list own projects", r.status_code == 200)
+            dev_pid = r.json()["data"][0]["id"] if (r.status_code == 200 and r.json()["data"]) else None
+            if dev_pid:
+                # document create (metadata) + list + buyer-visibility
+                r = c.post(f"{BASE}/v1/projects/{dev_pid}/documents", headers=h, json={
+                    "title": "Test Sale Agreement", "document_type": "sale_agreement",
+                    "cloudinary_public_id": "buildtrack/dev/seed/foundation",
+                    "cloudinary_url": "https://example.com/doc.pdf", "visible_to_buyers": True})
+                check("developer", "create document", r.status_code == 201, f"status={r.status_code}")
+                r = c.get(f"{BASE}/v1/projects/{dev_pid}/documents", headers=h)
+                check("developer", "list documents", r.status_code == 200 and len(r.json()["data"]) >= 1)
+            # confirm a site visit if any are pending
+            sv = c.get(f"{BASE}/v1/developers/me/site-visits?status=requested", headers=h)
+            if sv.status_code == 200 and sv.json()["data"]:
+                vid = sv.json()["data"][0]["id"]
+                r = c.patch(f"{BASE}/v1/developers/me/site-visits/{vid}", headers=h, json={"status": "confirmed"})
+                check("developer", "confirm site visit", r.status_code == 200, f"status={r.status_code}")
 
         # ---- SITE MANAGER (permission boundary) ----
         print("\n== SITE MANAGER ==")
@@ -123,6 +139,8 @@ def main():
             check("buyer", "view own project", r.status_code == 200)
             r = c.get(f"{BASE}/v1/buyer/milestones/pending-approval", headers=h)
             check("buyer", "pending approvals", r.status_code == 200)
+            r = c.get(f"{BASE}/v1/buyer/project/documents", headers=h)
+            check("buyer", "view documents", r.status_code == 200)
             r = c.post(f"{BASE}/v1/buyer/site-visits", headers=h,
                        json={"full_name": "Buyer Visit", "email": "buyer.diaspora@test.com",
                              "phone": "+254700000000", "requested_date": "2026-07-01", "party_size": 1})
