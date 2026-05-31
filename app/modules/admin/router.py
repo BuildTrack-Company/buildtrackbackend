@@ -90,25 +90,38 @@ async def list_projects(
     db: AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(Project).where(Project.deleted_at.is_(None)).offset(offset).limit(limit)
-    )
-    projects = result.scalars().all()
-    count = (await db.execute(select(func.count()).select_from(Project).where(Project.deleted_at.is_(None)))).scalar_one()
-
-    # Enrich each project with developer name + tier + subscription + buyer count
+    # One query: projects + developer columns (join) + buyer_count (correlated subquery).
     from app.modules.developers.models import Developer
     from app.modules.buyers.models import Buyer
+    buyer_count_sq = (
+        select(func.count()).select_from(Buyer)
+        .where(Buyer.project_id == Project.id, Buyer.deleted_at.is_(None))
+        .correlate(Project).scalar_subquery()
+    )
+    result = await db.execute(
+        select(
+            Project,
+            Developer.company_name,
+            Developer.subscription_tier,
+            Developer.subscription_status,
+            buyer_count_sq.label("buyer_count"),
+        )
+        .outerjoin(Developer, Developer.id == Project.developer_id)
+        .where(Project.deleted_at.is_(None))
+        .order_by(Project.created_at.desc())
+        .offset(offset).limit(limit)
+    )
+    count = (await db.execute(
+        select(func.count()).select_from(Project).where(Project.deleted_at.is_(None))
+    )).scalar_one()
+
     rows = []
-    for p in projects:
-        data = ProjectResponse.model_validate(p).model_dump()
-        dev = (await db.execute(select(Developer).where(Developer.id == p.developer_id))).scalar_one_or_none()
-        data["developer_name"] = dev.company_name if dev else None
-        data["subscription_tier"] = dev.subscription_tier if dev else None
-        data["subscription_status"] = dev.subscription_status if dev else None
-        data["buyer_count"] = (await db.execute(
-            select(func.count()).select_from(Buyer).where(Buyer.project_id == p.id, Buyer.deleted_at.is_(None))
-        )).scalar_one()
+    for proj, company_name, tier, sub_status, buyer_count in result.all():
+        data = ProjectResponse.model_validate(proj).model_dump()
+        data["developer_name"] = company_name
+        data["subscription_tier"] = tier
+        data["subscription_status"] = sub_status
+        data["buyer_count"] = buyer_count or 0
         rows.append(data)
 
     return paginated(rows, count, page, limit, request=request)
@@ -143,15 +156,39 @@ async def list_uploads(
     db: AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(Upload).order_by(Upload.created_at.desc()).offset(offset).limit(limit)
+    rows_result, count = await _query_uploads(db, offset, limit)
+    return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
+
+
+async def _query_uploads(db: AsyncSession, offset: int, limit: int, where=None):
+    """One joined query for uploads + project name + developer name (no N+1)."""
+    from app.modules.developers.models import Developer
+    stmt = (
+        select(Upload, Project.name, Developer.company_name)
+        .outerjoin(Project, Project.id == Upload.project_id)
+        .outerjoin(Developer, Developer.id == Upload.developer_id)
     )
-    uploads = result.scalars().all()
-    count = (await db.execute(select(func.count()).select_from(Upload))).scalar_one()
-    return paginated(
-        [UploadResponse.model_validate(u).model_dump() for u in uploads],
-        count, page, limit, request=request,
-    )
+    count_stmt = select(func.count()).select_from(Upload)
+    if where is not None:
+        stmt = stmt.where(where)
+        count_stmt = count_stmt.where(where)
+    stmt = stmt.order_by(Upload.created_at.desc()).offset(offset).limit(limit)
+    rows = (await db.execute(stmt)).all()
+    count = (await db.execute(count_stmt)).scalar_one()
+    return rows, count
+
+
+def _enrich_uploads(rows):
+    out = []
+    for u, project_name, company_name in rows:
+        data = UploadResponse.model_validate(u).model_dump()
+        data["project_name"] = project_name
+        data["developer_name"] = company_name
+        data["gps_distance_meters"] = u.distance_from_site_m
+        data["fanout_status"] = u.notification_fanout_status
+        data["is_flagged"] = u.status == "flagged"
+        out.append(data)
+    return out
 
 
 @router.get("/uploads/pending")
@@ -162,17 +199,10 @@ async def list_pending_uploads(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """All uploads awaiting admin review (GPS-valid and GPS-flagged alike)."""
+    """All uploads awaiting admin review."""
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(Upload).where(Upload.status == "pending_review").order_by(Upload.created_at.desc()).offset(offset).limit(limit)
-    )
-    uploads = result.scalars().all()
-    count = (await db.execute(select(func.count()).select_from(Upload).where(Upload.status == "pending_review"))).scalar_one()
-    return paginated(
-        [UploadResponse.model_validate(u).model_dump() for u in uploads],
-        count, page, limit, request=request,
-    )
+    rows_result, count = await _query_uploads(db, offset, limit, where=(Upload.status == "pending"))
+    return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
 
 
 @router.get("/uploads/flagged")
@@ -183,25 +213,10 @@ async def list_flagged_uploads(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """GPS-flagged uploads (subset of pending_review with flag_reason set)."""
+    """Flagged or rejected uploads needing attention."""
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(Upload).where(
-            Upload.status == "pending_review",
-            Upload.gps_validated.is_(False),
-        ).order_by(Upload.created_at.desc()).offset(offset).limit(limit)
-    )
-    uploads = result.scalars().all()
-    count = (await db.execute(
-        select(func.count()).select_from(Upload).where(
-            Upload.status == "pending_review",
-            Upload.gps_validated.is_(False),
-        )
-    )).scalar_one()
-    return paginated(
-        [UploadResponse.model_validate(u).model_dump() for u in uploads],
-        count, page, limit, request=request,
-    )
+    rows_result, count = await _query_uploads(db, offset, limit, where=Upload.status.in_(["flagged", "rejected"]))
+    return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
 
 
 @router.post("/uploads/{upload_id}/review")

@@ -86,16 +86,22 @@ async def soft_delete_developer(db: AsyncSession, developer_id: str):
 
 
 async def get_platform_stats(db: AsyncSession) -> dict:
-    total_devs = (await db.execute(select(func.count()).select_from(Developer).where(Developer.deleted_at.is_(None)))).scalar_one()
-    total_projects = (await db.execute(select(func.count()).select_from(Project).where(Project.deleted_at.is_(None)))).scalar_one()
-    total_buyers = (await db.execute(select(func.count()).select_from(Buyer).where(Buyer.deleted_at.is_(None)))).scalar_one()
-    total_uploads = (await db.execute(select(func.count()).select_from(Upload))).scalar_one()
-    flagged = (await db.execute(select(func.count()).select_from(Upload).where(Upload.status == "flagged"))).scalar_one()
-
+    # Single round-trip: 5 scalar subqueries in one statement (Neon RTT is the bottleneck).
+    from sqlalchemy import text
+    row = (await db.execute(text("""
+        SELECT
+          (SELECT count(*) FROM developers WHERE deleted_at IS NULL) AS total_developers,
+          (SELECT count(*) FROM projects   WHERE deleted_at IS NULL) AS total_projects,
+          (SELECT count(*) FROM buyers     WHERE deleted_at IS NULL) AS total_buyers,
+          (SELECT count(*) FROM uploads)                             AS total_uploads,
+          (SELECT count(*) FROM uploads WHERE status = 'flagged')    AS flagged_uploads,
+          (SELECT count(*) FROM uploads WHERE status = 'pending')    AS pending_uploads
+    """))).mappings().one()
     return {
-        "total_developers": total_devs,
-        "total_projects": total_projects,
-        "total_buyers": total_buyers,
-        "total_uploads": total_uploads,
-        "flagged_uploads": flagged,
+        "total_developers": row["total_developers"],
+        "total_projects": row["total_projects"],
+        "total_buyers": row["total_buyers"],
+        "total_uploads": row["total_uploads"],
+        "flagged_uploads": row["flagged_uploads"],
+        "pending_uploads": row["pending_uploads"],
     }

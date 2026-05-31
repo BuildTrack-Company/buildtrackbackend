@@ -21,9 +21,12 @@ _db_url, _connect_args = _clean_db_url(settings.DATABASE_URL)
 
 engine = create_async_engine(
     _db_url,
-    echo=settings.ENVIRONMENT == "development",
+    echo=False,  # query logging adds large per-request overhead
     pool_size=10,
     max_overflow=20,
+    # No pool_pre_ping: it costs a full round-trip per checkout, and Neon RTT is the
+    # bottleneck. pool_recycle below covers Neon's ~5-min idle compute suspend window.
+    pool_recycle=280,
     connect_args=_connect_args,
 )
 

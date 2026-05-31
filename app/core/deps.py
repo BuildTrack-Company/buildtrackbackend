@@ -31,17 +31,26 @@ async def get_current_user(
     if not user_id:
         raise UnauthorizedError("Invalid token payload")
 
+    # Fetch the user and the token-revocation check in a single round-trip
+    # (Neon RTT dominates request latency, so we avoid a second query here).
     from app.modules.auth.models import AuthTokenDenyList
+    from sqlalchemy import exists
     jti = payload.get("jti")
-    if jti:
-        result = await db.execute(select(AuthTokenDenyList).where(AuthTokenDenyList.jti == jti))
-        if result.scalar_one_or_none():
+    revoked_col = (
+        exists().where(AuthTokenDenyList.jti == jti).label("revoked")
+        if jti else None
+    )
+    if revoked_col is not None:
+        row = (await db.execute(select(User, revoked_col).where(User.id == user_id))).one_or_none()
+        if not row:
+            raise UnauthorizedError("User not found")
+        user, revoked = row
+        if revoked:
             raise UnauthorizedError("Token has been revoked")
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise UnauthorizedError("User not found")
+    else:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if not user:
+            raise UnauthorizedError("User not found")
 
     if not user.is_active:
         raise UnauthorizedError("User account is disabled")
