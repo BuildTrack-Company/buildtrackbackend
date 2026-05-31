@@ -1,6 +1,19 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
+
+
+# Predefined construction-update categories (brief Section 7 / visibility timeline)
+UPLOAD_CATEGORIES = [
+    "Foundation Works",
+    "Structural Works",
+    "Roofing Works",
+    "Facade Works",
+    "MEP Installation",
+    "Finishing Works",
+    "Milestone Completed",
+    "General Update",
+]
 
 
 class UploadSessionRequest(BaseModel):
@@ -35,11 +48,21 @@ class FinalizeUploadRequest(BaseModel):
     session_id: str
     project_id: str
     milestone_id: Optional[str] = None
+    title: str
+    category: str
+    progress_at_upload: int = Field(ge=0, le=100)
     caption: Optional[str] = None
     capture_latitude: float
     capture_longitude: float
     accuracy_m: float
     photos: List[PhotoInput]
+
+    @field_validator("category")
+    @classmethod
+    def _valid_category(cls, v: str) -> str:
+        if v not in UPLOAD_CATEGORIES:
+            raise ValueError(f"category must be one of: {', '.join(UPLOAD_CATEGORIES)}")
+        return v
 
 
 class UploadResponse(BaseModel):
@@ -47,10 +70,15 @@ class UploadResponse(BaseModel):
     project_id: str
     developer_id: str
     milestone_id: Optional[str]
+    title: Optional[str] = None
+    category: Optional[str] = None
+    progress_at_upload: Optional[int] = None
     caption: Optional[str]
     capture_latitude: Optional[float]
     capture_longitude: Optional[float]
     accuracy_m: Optional[float]
+    distance_from_site_m: Optional[float] = None
+    within_boundary: bool = False
     gps_validated: bool
     photo_count: int
     status: str

@@ -1,0 +1,17 @@
+{% extends "_base.html.j2" %}
+{% block title %}New inquiry for {{ project_name }}{% endblock %}
+{% block content %}
+<div class="greeting">New inquiry for {{ project_name }}</div>
+<p>A prospective buyer just submitted an inquiry through your BuildTrack visibility page.</p>
+<div class="datacard"><strong>{{ first_name }} {{ last_name }}</strong></div>
+<div class="datacard">Email: <strong>{{ email }}</strong></div>
+{% if phone %}<div class="datacard">Phone: <strong>{{ phone }}</strong></div>{% endif %}
+{% if location %}<div class="datacard">Location: <strong>{{ location }}</strong></div>{% endif %}
+{% if message %}
+<hr class="divider">
+<p><strong style="color:#e2e8f0;">Message</strong><br>{{ message }}</p>
+{% endif %}
+<hr class="divider">
+<p>Log in to your developer dashboard to view and respond to this lead.</p>
+<a class="btn" href="https://buildtrack.co.ke/developer/dashboard">Open Leads Inbox</a>
+{% endblock %}

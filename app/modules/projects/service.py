@@ -178,3 +178,39 @@ async def delete_project(db: AsyncSession, project_id: str, developer_id: str):
     project = await get_project(db, project_id, developer_id)
     project.deleted_at = datetime.now(timezone.utc)
     await db.commit()
+
+
+async def update_visibility_page(
+    db: AsyncSession, project_id: str, developer_id: str,
+    description: str = None, tagline: str = None, starting_price: str = None, slug: str = None,
+) -> Project:
+    """Update visibility-page content. Slug change validates uniqueness."""
+    project = await get_project(db, project_id, developer_id)
+    if description is not None:
+        project.visibility_description = description
+    if tagline is not None:
+        project.visibility_tagline = tagline
+    if starting_price is not None:
+        project.starting_price = starting_price
+    if slug is not None and slug != project.slug:
+        desired = _slugify(slug)
+        clash = await db.execute(
+            select(Project.id).where(Project.slug == desired, Project.id != project_id)
+        )
+        if clash.scalar_one_or_none():
+            from app.core.exceptions import DuplicateError
+            raise DuplicateError("That slug is already in use", {"slug": desired})
+        project.slug = desired
+    project.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+async def set_visibility_published(db: AsyncSession, project_id: str, developer_id: str, published: bool) -> Project:
+    project = await get_project(db, project_id, developer_id)
+    project.visibility_page_published = published
+    project.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(project)
+    return project

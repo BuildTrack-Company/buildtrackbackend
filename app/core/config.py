@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     CLOUDINARY_UPLOAD_PRESET: str = "buildtrack_signed"
     CLOUDINARY_FOLDER_ROOT: str = "buildtrack/dev"
     RESEND_API_KEY: str = ""
+    EMAIL_PROVIDER: str = "resend"  # resend | gmail | brevo
+    GMAIL_APP_PASSWORD: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
     EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
     EMAIL_FROM_NAME: str = "BuildTrack"
     EMAIL_REPLY_TO: str = "support@buildtrack.co.ke"

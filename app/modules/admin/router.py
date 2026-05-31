@@ -210,6 +210,18 @@ async def review_upload(
     if req.action == "approve":
         upload.status = "approved"
         upload.gps_validated = True
+
+        # Update project construction progress from the approved record
+        project = (await db.execute(select(Project).where(Project.id == upload.project_id))).scalar_one_or_none()
+        if project and upload.progress_at_upload is not None:
+            if upload.progress_at_upload > (project.construction_progress or 0):
+                project.construction_progress = upload.progress_at_upload
+            # On a completion record that takes the project to 100, credit the developer
+            if upload.progress_at_upload >= 100 or (upload.category == "Milestone Completed" and project.construction_progress >= 100):
+                from app.modules.developers.models import Developer
+                dev = (await db.execute(select(Developer).where(Developer.id == upload.developer_id))).scalar_one_or_none()
+                if dev:
+                    dev.projects_completed = (dev.projects_completed or 0) + 1
     elif req.action == "reject":
         upload.status = "rejected"
         upload.flag_reason = req.reason
@@ -230,6 +242,14 @@ async def review_upload(
         after={"status": upload.status, "reason": req.reason},
         request_id=getattr(request.state, "request_id", None),
     )
+
+    # On approval, fan out buyer notifications (best effort, after commit)
+    if req.action == "approve":
+        try:
+            from app.modules.notifications.service import fanout_upload_notifications
+            await fanout_upload_notifications(upload.id, db)
+        except Exception:
+            pass
 
     return ok(UploadResponse.model_validate(upload).model_dump(), request=request)
 

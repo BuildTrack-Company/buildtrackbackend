@@ -166,3 +166,53 @@ async def recalculate_usage_counters(db: AsyncSession) -> dict:
 
     logger.info("usage_counters_recalculated", developers=updated)
     return {"developers_updated": updated}
+
+
+async def recalculate_developer_stats(db: AsyncSession) -> dict:
+    """Recompute credibility-profile stats for every developer:
+    active_developments, avg_update_frequency_days, update_consistency_pct."""
+    from app.modules.developers.models import Developer
+    from app.modules.projects.models import Project
+    from app.modules.uploads.models import Upload
+    from sqlalchemy import func
+
+    developers = (await db.execute(
+        select(Developer).where(Developer.deleted_at.is_(None))
+    )).scalars().all()
+
+    updated = 0
+    for dev in developers:
+        # Active developments = non-completed, non-deleted projects
+        active = (await db.execute(
+            select(func.count()).select_from(Project).where(
+                Project.developer_id == dev.id,
+                Project.deleted_at.is_(None),
+                Project.status != "completed",
+            )
+        )).scalar_one()
+        dev.active_developments = active
+
+        # Approved-update cadence across this developer's projects
+        approved = (await db.execute(
+            select(Upload.created_at).where(
+                Upload.developer_id == dev.id,
+                Upload.status == "approved",
+            ).order_by(Upload.created_at.asc())
+        )).scalars().all()
+
+        if len(approved) >= 2:
+            first, last = approved[0], approved[-1]
+            span_days = max((last - first).days, 1)
+            dev.avg_update_frequency_days = round(span_days / (len(approved) - 1), 2)
+            # Consistency: share of weeks in the span that had at least one update
+            weeks = max(span_days // 7, 1)
+            weeks_with_update = len({(u - first).days // 7 for u in approved})
+            dev.update_consistency_pct = round(min(weeks_with_update / weeks, 1.0) * 100, 1)
+        else:
+            dev.avg_update_frequency_days = None
+            dev.update_consistency_pct = None
+        updated += 1
+
+    await db.commit()
+    logger.info("developer_stats_recalculated", developers=updated)
+    return {"developers_updated": updated}

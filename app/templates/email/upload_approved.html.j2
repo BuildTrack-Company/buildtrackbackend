@@ -1,0 +1,13 @@
+{% extends "_base.html.j2" %}
+{% block title %}New verified update: {{ project_name }}{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ full_name }},</div>
+<span class="badge">Site Progress Verified</span>
+<p>A new construction update for <strong style="color:#e2e8f0;">{{ project_name }}</strong> has been verified and approved.</p>
+{% if title %}<div class="datacard"><strong>{{ title }}</strong></div>{% endif %}
+{% if category %}<div class="datacard">Category: <strong>{{ category }}</strong></div>{% endif %}
+<div class="datacard">Photos: <strong>{{ photo_count }}</strong></div>
+{% if progress_at_upload is not none %}<div class="datacard">Construction progress: <strong>{{ progress_at_upload }}%</strong></div>{% endif %}
+{% if caption %}<hr class="divider"><p>{{ caption }}</p>{% endif %}
+<a class="btn" href="https://buildtrack.co.ke/buyer/project">View Project Portal</a>
+{% endblock %}

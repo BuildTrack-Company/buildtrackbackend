@@ -127,6 +127,81 @@ async def lookup_project_by_code(
     return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
 
 
+# ─── Visibility-page management (developer) ──────────────────────────────────
+
+class VisibilityPageUpdate(BaseModel):
+    description: Optional[str] = None
+    tagline: Optional[str] = None
+    starting_price: Optional[str] = None
+    slug: Optional[str] = None
+
+
+@router.patch("/projects/{project_id}/visibility-page", dependencies=[require_permission("projects", "update")])
+async def update_visibility_page(
+    project_id: str,
+    req: VisibilityPageUpdate,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await service.update_visibility_page(
+        db, project_id, ctx.developer_id,
+        description=req.description, tagline=req.tagline,
+        starting_price=req.starting_price, slug=req.slug,
+    )
+    await log_action(
+        db, actor_user_id=ctx.user_id, actor_role=ctx.role,
+        action="visibility_page.updated", entity_type="project", entity_id=project_id,
+        developer_id=ctx.developer_id, after=req.model_dump(exclude_none=True),
+        request_id=getattr(request.state, "request_id", None),
+    )
+    return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
+
+
+@router.post("/projects/{project_id}/visibility-page/publish", dependencies=[require_permission("projects", "update")])
+async def publish_visibility_page(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await service.set_visibility_published(db, project_id, ctx.developer_id, True)
+    await log_action(
+        db, actor_user_id=ctx.user_id, actor_role=ctx.role,
+        action="visibility_page.published", entity_type="project", entity_id=project_id,
+        developer_id=ctx.developer_id, request_id=getattr(request.state, "request_id", None),
+    )
+    return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
+
+
+@router.post("/projects/{project_id}/visibility-page/unpublish", dependencies=[require_permission("projects", "update")])
+async def unpublish_visibility_page(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await service.set_visibility_published(db, project_id, ctx.developer_id, False)
+    await log_action(
+        db, actor_user_id=ctx.user_id, actor_role=ctx.role,
+        action="visibility_page.unpublished", entity_type="project", entity_id=project_id,
+        developer_id=ctx.developer_id, request_id=getattr(request.state, "request_id", None),
+    )
+    return ok(schemas.ProjectResponse.model_validate(project).model_dump(), request=request)
+
+
+@router.get("/developers/me/projects/{project_id}/analytics", dependencies=[require_permission("projects", "read")])
+async def get_project_visibility_analytics(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.public import service as public_service
+    data = await public_service.get_project_analytics(db, ctx.developer_id, project_id)
+    return ok(data, request=request)
+
+
 # ─── Workflow runtime ────────────────────────────────────────────────────────
 
 @router.get("/projects/{project_id}/workflow", dependencies=[require_permission("workflow", "read")])

@@ -46,6 +46,8 @@ from app.modules.project_types.router import router as project_types_router, adm
 from app.modules.roles.router import router as roles_router
 from app.modules.members.router import router as members_router
 from app.modules.settings.router import router as settings_router
+from app.modules.inquiries.router import router as inquiries_router
+from app.modules.public.router import router as public_router
 
 API_PREFIX = "/v1"
 
@@ -65,6 +67,8 @@ app.include_router(project_types_admin_router, prefix=API_PREFIX)
 app.include_router(roles_router, prefix=API_PREFIX)
 app.include_router(members_router, prefix=API_PREFIX)
 app.include_router(settings_router, prefix=API_PREFIX)
+app.include_router(inquiries_router, prefix=API_PREFIX)
+app.include_router(public_router, prefix=API_PREFIX)
 
 
 @app.get("/healthz", tags=["health"])
