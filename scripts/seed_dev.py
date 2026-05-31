@@ -461,7 +461,7 @@ async def seed(db: AsyncSession):
             id=new_id(),
             user_id=dev_user.id,
             company_name="Acoma Developments Ltd",
-            subscription_tier="growth",
+            subscription_tier="medium",
             subscription_status="active",
             created_at=now,
             updated_at=now,
