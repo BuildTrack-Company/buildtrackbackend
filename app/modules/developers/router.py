@@ -67,6 +67,52 @@ async def get_developer_stats(
     }, request=request)
 
 
+@router.get("/me/activity")
+async def get_my_activity_feed(
+    request: Request,
+    limit: int = 20,
+    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Chronological 'what's been happening' feed for the developer dashboard,
+    sourced from the audit log (last 90 days, scoped to this developer)."""
+    from app.modules.admin.models import AuditLog
+
+    dev = await service.get_developer_by_user_id(db, current_user.id)
+    limit = max(1, min(limit, 100))
+    since = datetime.now(timezone.utc) - timedelta(days=90)
+
+    rows = (await db.execute(
+        select(AuditLog).where(
+            AuditLog.developer_id == dev.id,
+            AuditLog.created_at >= since,
+        ).order_by(AuditLog.created_at.desc()).limit(limit)
+    )).scalars().all()
+
+    summaries = {
+        "upload.approved": "A construction update was approved",
+        "upload.rejected.gps_outside_boundary": "An upload was rejected (outside site boundary)",
+        "upload.rejectd": "An upload was rejected",
+        "upload.rejected": "An upload was rejected",
+        "milestone.completed": "A milestone was marked complete",
+        "milestone.delayed": "A milestone was marked delayed",
+        "buyer.invited": "A buyer was invited",
+        "inquiry.created": "A new inquiry was received",
+        "project.visibility.published": "A visibility page was published",
+        "project.created": "A project was created",
+        "member.invited": "A team member was invited",
+    }
+    feed = [{
+        "id": r.id,
+        "type": r.action,
+        "entity_type": r.entity_type,
+        "summary": summaries.get(r.action, r.action.replace(".", " ").replace("_", " ").capitalize()),
+        "actor_role": r.actor_role,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    } for r in rows]
+    return ok(feed, request=request)
+
+
 @router.get("/me")
 async def get_my_developer_profile(
     request: Request,

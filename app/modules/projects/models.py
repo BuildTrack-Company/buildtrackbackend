@@ -33,6 +33,12 @@ class Project(Base):
     activity_overdue_threshold_days: Mapped[int] = mapped_column(Integer, default=14)
     visibility_page_views: Mapped[int] = mapped_column(Integer, default=0)
     visibility_page_published: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ── Independent third-party verification (brief: spot-check banner) ────────
+    independent_verification_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_independent_verification_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_independent_verifier_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_independent_verifier_outcome: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # passed, issues_noted, failed
+    last_independent_verifier_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     project_type_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("project_types.id"), nullable=True)
     workflow_template_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_templates.id"), nullable=True)
     current_stage_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_stages.id"), nullable=True)

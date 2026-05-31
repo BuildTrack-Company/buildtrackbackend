@@ -134,6 +134,98 @@ async def get_buyer_project(
     return ok(project_data, request=request)
 
 
+async def _buyer_and_project(db, user_id):
+    from sqlalchemy import select
+    from app.modules.buyers.models import Buyer
+    from app.modules.projects.models import Project
+    from app.core.exceptions import NotFoundError
+    buyer = (await db.execute(select(Buyer).where(Buyer.user_id == user_id, Buyer.deleted_at.is_(None)))).scalar_one_or_none()
+    if not buyer:
+        raise NotFoundError("Buyer profile not found")
+    project = (await db.execute(select(Project).where(Project.id == buyer.project_id, Project.deleted_at.is_(None)))).scalar_one_or_none()
+    if not project:
+        raise NotFoundError("Project not found")
+    return buyer, project
+
+
+@router.get("/buyer/milestones/pending-approval")
+async def buyer_pending_milestone_approvals(
+    request: Request,
+    current_user: User = Depends(require_buyer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Completed milestones in the buyer's project that this buyer has not yet signed off."""
+    from sqlalchemy import select
+    from app.modules.milestones.models import Milestone, MilestoneApproval
+    from app.modules.milestones.schemas import MilestoneResponse
+    _buyer, project = await _buyer_and_project(db, current_user.id)
+    milestones = (await db.execute(
+        select(Milestone).where(Milestone.project_id == project.id, Milestone.status == "complete").order_by(Milestone.order_index)
+    )).scalars().all()
+    approved_ids = set((await db.execute(
+        select(MilestoneApproval.milestone_id).where(MilestoneApproval.buyer_user_id == current_user.id)
+    )).scalars().all())
+    pending = [MilestoneResponse.model_validate(m).model_dump() for m in milestones if m.id not in approved_ids]
+    return ok(pending, request=request)
+
+
+@router.post("/buyer/milestones/{milestone_id}/approve")
+async def buyer_approve_milestone(
+    milestone_id: str,
+    request: Request,
+    current_user: User = Depends(require_buyer),
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.modules.milestones.models import Milestone, MilestoneApproval
+    from app.core.exceptions import NotFoundError
+    from app.shared.audit import log_action
+    from app.shared.ids import new_id
+    _buyer, project = await _buyer_and_project(db, current_user.id)
+    ms = (await db.execute(select(Milestone).where(Milestone.id == milestone_id, Milestone.project_id == project.id))).scalar_one_or_none()
+    if not ms:
+        raise NotFoundError("Milestone not found")
+    db.add(MilestoneApproval(
+        id=new_id(), milestone_id=milestone_id, buyer_user_id=current_user.id,
+        decision="approved", decided_at=datetime.now(timezone.utc),
+    ))
+    await db.commit()
+    await log_action(db, actor_user_id=current_user.id, actor_role="buyer",
+                     action="milestone.buyer_approved", entity_type="milestone", entity_id=milestone_id,
+                     developer_id=project.developer_id)
+    return ok({"milestone_id": milestone_id, "decision": "approved"}, request=request)
+
+
+@router.post("/buyer/milestones/{milestone_id}/request-clarification")
+async def buyer_request_clarification(
+    milestone_id: str,
+    req: dict,
+    request: Request,
+    current_user: User = Depends(require_buyer),
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.modules.milestones.models import Milestone, MilestoneApproval
+    from app.core.exceptions import NotFoundError
+    from app.shared.audit import log_action
+    from app.shared.ids import new_id
+    _buyer, project = await _buyer_and_project(db, current_user.id)
+    ms = (await db.execute(select(Milestone).where(Milestone.id == milestone_id, Milestone.project_id == project.id))).scalar_one_or_none()
+    if not ms:
+        raise NotFoundError("Milestone not found")
+    db.add(MilestoneApproval(
+        id=new_id(), milestone_id=milestone_id, buyer_user_id=current_user.id,
+        decision="clarification_requested", reason=req.get("reason"), decided_at=datetime.now(timezone.utc),
+    ))
+    await db.commit()
+    await log_action(db, actor_user_id=current_user.id, actor_role="buyer",
+                     action="milestone.clarification_requested", entity_type="milestone", entity_id=milestone_id,
+                     developer_id=project.developer_id, after={"reason": req.get("reason")})
+    return ok({"milestone_id": milestone_id, "decision": "clarification_requested"}, request=request)
+
+
 @router.get("/buyer/notifications/preferences")
 async def get_notification_preferences(
     request: Request,

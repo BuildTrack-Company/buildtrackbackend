@@ -24,6 +24,8 @@ from app.modules.notifications.models import NotificationLog
 from app.modules.admin.models import AuditLog, AdminIpAllowlist
 from app.modules.webhooks.models import WebhookEvent
 from app.modules.inquiries.models import Inquiry, VisibilityPageView
+from app.modules.documents.models import ProjectDocument
+from app.modules.site_visits.models import SiteVisitRequest
 
 config = context.config
 

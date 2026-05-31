@@ -282,6 +282,43 @@ async def review_upload(
     return ok(UploadResponse.model_validate(upload).model_dump(), request=request)
 
 
+@router.post("/projects/{project_id}/independent-verification")
+async def record_independent_verification(
+    project_id: str,
+    req: dict,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin records a third-party spot-check outcome on a project."""
+    from datetime import datetime, timezone
+    from app.core.exceptions import NotFoundError
+    from app.shared.audit import log_action
+    project = (await db.execute(select(Project).where(Project.id == project_id, Project.deleted_at.is_(None)))).scalar_one_or_none()
+    if not project:
+        raise NotFoundError("Project not found")
+    project.independent_verification_enabled = True
+    project.last_independent_verification_at = datetime.now(timezone.utc)
+    project.last_independent_verifier_name = req.get("verifier_name")
+    project.last_independent_verifier_outcome = req.get("outcome")  # passed, issues_noted, failed
+    project.last_independent_verifier_notes = req.get("notes")
+    await db.commit()
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin",
+        action="project.independent_verification.recorded", entity_type="project", entity_id=project_id,
+        developer_id=project.developer_id, after={"outcome": project.last_independent_verifier_outcome},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    return ok({
+        "project_id": project_id,
+        "independent_verification_enabled": project.independent_verification_enabled,
+        "last_independent_verification_at": project.last_independent_verification_at.isoformat(),
+        "last_independent_verifier_name": project.last_independent_verifier_name,
+        "last_independent_verifier_outcome": project.last_independent_verifier_outcome,
+        "last_independent_verifier_notes": project.last_independent_verifier_notes,
+    }, request=request)
+
+
 @router.get("/audit-log")
 async def list_audit_log(
     request: Request,

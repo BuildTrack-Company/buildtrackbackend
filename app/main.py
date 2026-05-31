@@ -48,6 +48,8 @@ from app.modules.members.router import router as members_router
 from app.modules.settings.router import router as settings_router
 from app.modules.inquiries.router import router as inquiries_router
 from app.modules.public.router import router as public_router
+from app.modules.site_visits.router import router as site_visits_router
+from app.modules.documents.router import router as documents_router
 
 API_PREFIX = "/v1"
 
@@ -69,6 +71,8 @@ app.include_router(members_router, prefix=API_PREFIX)
 app.include_router(settings_router, prefix=API_PREFIX)
 app.include_router(inquiries_router, prefix=API_PREFIX)
 app.include_router(public_router, prefix=API_PREFIX)
+app.include_router(site_visits_router, prefix=API_PREFIX)
+app.include_router(documents_router, prefix=API_PREFIX)
 
 
 @app.get("/healthz", tags=["health"])
