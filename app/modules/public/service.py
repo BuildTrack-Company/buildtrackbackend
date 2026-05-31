@@ -220,6 +220,12 @@ async def get_visibility_page(db: AsyncSession, slug: str) -> dict:
             "company_overview": dev.company_overview if dev else None,
         },
         "verification_badges": {"gps_verified_records": len(approved)},
+        "independent_verification": {
+            "enabled": getattr(project, "independent_verification_enabled", False),
+            "last_verified_at": getattr(project, "last_independent_verification_at", None),
+            "verifier_name": getattr(project, "last_independent_verifier_name", None),
+            "outcome": getattr(project, "last_independent_verifier_outcome", None),
+        },
     }
 
 

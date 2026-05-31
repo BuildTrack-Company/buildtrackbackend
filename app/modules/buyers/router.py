@@ -81,57 +81,93 @@ async def get_buyer_project(
     current_user: User = Depends(require_buyer),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the buyer's assigned project with milestones and uploads."""
+    """Get the buyer's assigned project: header, milestones, photos and update feed.
+    Shaped to match the buyer dashboard contract (developer_company, photos, updates...)."""
     from sqlalchemy import select
     from app.modules.buyers.models import Buyer
     from app.modules.projects.models import Project
+    from app.modules.developers.models import Developer
     from app.modules.milestones.models import Milestone
-    from app.modules.milestones.schemas import MilestoneResponse
-    from app.modules.uploads.models import Upload
-    from app.modules.uploads.schemas import UploadResponse
+    from app.modules.uploads.models import Upload, Photo
+    from app.shared.storage import get_signed_url
+    from app.core.exceptions import NotFoundError
 
-    result = await db.execute(
-        select(Buyer).where(
-            Buyer.user_id == current_user.id,
-            Buyer.deleted_at.is_(None),
-        )
-    )
-    buyer = result.scalar_one_or_none()
+    buyer = (await db.execute(
+        select(Buyer).where(Buyer.user_id == current_user.id, Buyer.deleted_at.is_(None))
+    )).scalar_one_or_none()
     if not buyer:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError("Buyer profile not found")
 
-    result = await db.execute(
-        select(Project).where(
-            Project.id == buyer.project_id,
-            Project.deleted_at.is_(None),
-        )
-    )
-    project = result.scalar_one_or_none()
+    project = (await db.execute(
+        select(Project).where(Project.id == buyer.project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
     if not project:
-        from app.core.exceptions import NotFoundError
         raise NotFoundError("Project not found")
 
-    result = await db.execute(
+    developer = (await db.execute(
+        select(Developer).where(Developer.id == project.developer_id)
+    )).scalar_one_or_none()
+
+    milestones = (await db.execute(
         select(Milestone).where(Milestone.project_id == project.id).order_by(Milestone.order_index)
-    )
-    milestones = result.scalars().all()
+    )).scalars().all()
 
-    result = await db.execute(
+    uploads = (await db.execute(
         select(Upload).where(
-            Upload.project_id == project.id,
-            Upload.status == "approved",
+            Upload.project_id == project.id, Upload.status == "approved",
         ).order_by(Upload.created_at.desc()).limit(20)
-    )
-    uploads = result.scalars().all()
+    )).scalars().all()
+    milestone_names = {m.id: m.name for m in milestones}
 
-    from app.modules.projects.schemas import ProjectResponse
-    project_data = ProjectResponse.model_validate(project).model_dump()
-    project_data["milestones"] = [MilestoneResponse.model_validate(m).model_dump() for m in milestones]
-    project_data["recent_uploads"] = [UploadResponse.model_validate(u).model_dump() for u in uploads]
-    project_data["unit_number"] = buyer.unit_number
+    # Photos for the gallery (signed Cloudinary URLs), newest first.
+    upload_ids = [u.id for u in uploads]
+    photos = []
+    if upload_ids:
+        photo_rows = (await db.execute(
+            select(Photo).where(Photo.upload_id.in_(upload_ids)).order_by(Photo.created_at.desc())
+        )).scalars().all()
+        for ph in photo_rows[:40]:
+            try:
+                url = get_signed_url(ph.cloudinary_public_id, "display")
+                thumb = get_signed_url(ph.cloudinary_public_id, "thumbnail")
+            except Exception:
+                url = ph.cloudinary_url
+                thumb = ph.cloudinary_url
+            photos.append({
+                "id": ph.id, "url": url, "thumbnail_url": thumb,
+                "caption": None,
+                "latitude": ph.capture_latitude, "longitude": ph.capture_longitude,
+                "captured_at": ph.created_at.isoformat() if ph.created_at else None,
+            })
 
-    return ok(project_data, request=request)
+    updates = [{
+        "id": u.id,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "milestone_name": milestone_names.get(u.milestone_id) or u.title or u.category or "Update",
+        "note": u.caption,
+        "photo_count": u.photo_count or 0,
+    } for u in uploads]
+
+    payload = {
+        "id": project.id,
+        "name": project.name,
+        "status": project.status,
+        "developer_company": developer.company_name if developer else None,
+        "location_label": project.location_name,
+        "unit_count": project.total_units or 0,
+        "unit_number": buyer.unit_number,
+        "construction_progress": project.construction_progress,
+        "health_status": project.health_status,
+        "notifications_enabled": buyer.notification_email,
+        "milestones": [{
+            "id": m.id, "name": m.name, "order": m.order_index, "status": m.status,
+            "planned_date": m.expected_date.isoformat() if m.expected_date else None,
+            "actual_date": m.completed_at.isoformat() if m.completed_at else None,
+        } for m in milestones],
+        "photos": photos,
+        "updates": updates,
+    }
+    return ok(payload, request=request)
 
 
 async def _buyer_and_project(db, user_id):
