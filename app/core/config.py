@@ -32,6 +32,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:8000",  # Swagger UI
         "http://127.0.0.1:8000",
+        "https://buildtrack.co.ke",
+        "https://admin.buildtrack.co.ke",
+        "https://buildtrack-frontend-portal.vercel.app",
+        "https://buildtrack-admin-portal.vercel.app",
     ]
 
 
