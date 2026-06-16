@@ -8,7 +8,7 @@ from app.modules.auth.models import User
 from app.modules.admin import service, schemas
 from app.modules.developers.schemas import DeveloperResponse
 from app.modules.projects.models import Project
-from app.modules.projects.schemas import ProjectResponse
+from app.modules.projects.schemas import ProjectResponse, ProjectCreate
 from app.modules.buyers.models import Buyer
 from app.modules.buyers.schemas import BuyerResponse
 from app.modules.uploads.models import Upload
@@ -127,6 +127,41 @@ async def list_projects(
     return paginated(rows, count, page, limit, request=request)
 
 
+@router.post("/projects", status_code=201)
+async def create_project_admin(
+    req: schemas.AdminProjectCreate,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.projects.service import create_project
+    from app.shared.audit import log_action
+    
+    project_create = ProjectCreate(
+        name=req.name,
+        location_name=req.location_name or "",
+        site_latitude=req.site_latitude or 0.0,
+        site_longitude=req.site_longitude or 0.0,
+        total_units=req.total_units or 0,
+        gps_radius_metres=req.gps_radius_metres
+    )
+    project = await create_project(db, req.developer_id, project_create)
+
+    await log_action(
+        db,
+        actor_user_id=current_user.id,
+        actor_role="admin",
+        action="project.created.admin",
+        entity_type="project",
+        entity_id=project.id,
+        developer_id=req.developer_id,
+        after={"name": project.name, "project_code": project.project_code},
+        request_id=getattr(request.state, "request_id", None),
+    )
+
+    return ok(ProjectResponse.model_validate(project).model_dump(), request=request)
+
+
 @router.get("/buyers")
 async def list_buyers(
     request: Request,
@@ -187,6 +222,7 @@ def _enrich_uploads(rows):
         data["gps_distance_meters"] = u.distance_from_site_m
         data["fanout_status"] = u.notification_fanout_status
         data["is_flagged"] = u.status == "flagged"
+        data["caption"] = u.caption
         out.append(data)
     return out
 
@@ -271,8 +307,8 @@ async def review_upload(
         request_id=getattr(request.state, "request_id", None),
     )
 
-    # On approval, fan out buyer notifications (best effort, after commit)
-    if req.action == "approve":
+    # On approval, fan out buyer notifications if requested (best effort, after commit)
+    if req.action == "approve" and req.send_notification:
         try:
             from app.modules.notifications.service import fanout_upload_notifications
             await fanout_upload_notifications(upload.id, db)

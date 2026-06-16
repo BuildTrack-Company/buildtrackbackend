@@ -33,6 +33,7 @@ class SubscriptionUpdate(BaseModel):
 class AdminUploadReview(BaseModel):
     action: str  # approve, reject
     reason: Optional[str] = None
+    send_notification: bool = True
 
 
 class PlatformStatsResponse(BaseModel):
@@ -41,3 +42,15 @@ class PlatformStatsResponse(BaseModel):
     total_buyers: int
     total_uploads: int
     flagged_uploads: int
+
+
+class AdminProjectCreate(BaseModel):
+    developer_id: str
+    project_code: str
+    name: str
+    location_name: Optional[str] = None
+    site_latitude: Optional[float] = None
+    site_longitude: Optional[float] = None
+    gps_radius_metres: float = 100.0
+    total_units: Optional[int] = None
+

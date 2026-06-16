@@ -53,6 +53,27 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
     success_count = 0
     fail_count = 0
 
+    # Fetch Milestone if any
+    milestone_name = "General Update"
+    milestone_number = 1
+    if upload.milestone_id:
+        from app.modules.milestones.models import Milestone
+        m = (await db.execute(select(Milestone).where(Milestone.id == upload.milestone_id))).scalar_one_or_none()
+        if m:
+            milestone_name = m.name
+            milestone_number = m.order_index
+
+    developer_name = "Developer"
+    from app.modules.developers.models import Developer
+    dev = (await db.execute(select(Developer).where(Developer.id == upload.developer_id))).scalar_one_or_none()
+    if dev:
+        developer_name = dev.company_name
+
+    # Format dates and coordinates
+    upload_date = upload.created_at.strftime("%d %b %Y")
+    upload_time = upload.created_at.strftime("%I:%M %p")
+    gps_coords = f"{upload.capture_latitude}, {upload.capture_longitude}" if upload.capture_latitude else "N/A"
+
     for i in range(0, len(buyers), BATCH_SIZE):
         batch = buyers[i:i + BATCH_SIZE]
         for buyer in batch:
@@ -63,10 +84,19 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                     template_name="buyer_update_notification.html.j2",
                     template_context={
                         "first_name": buyer.full_name or "Buyer",
+                        "developer_company_name": developer_name,
                         "project_name": project.name,
                         "update_title": upload.title or "New Site Photos",
+                        "update_category": upload.category or "Progress Update",
+                        "update_date": upload_date,
+                        "update_time": upload_time,
+                        "progress_percentage": upload.progress_at_upload or 0,
+                        "milestone_name": milestone_name,
+                        "milestone_number": milestone_number,
                         "update_description": upload.caption or "New photos have been uploaded to track construction progress.",
-                        "view_link": f"https://buildtrack.co.ke/project/{project.project_code}",
+                        "photo_count": upload.photo_count or 0,
+                        "gps_coordinates": gps_coords,
+                        "project_page_url": f"https://buildtrack.co.ke/project/{project.project_code}",
                     },
                 )
 
@@ -144,6 +174,16 @@ async def send_milestone_notification(milestone_id: str, event: str, db: AsyncSe
     }
     subject = subject_map.get(event, f"Milestone update: {milestone.name}")
 
+    developer_name = "Developer"
+    from app.modules.developers.models import Developer
+    dev = (await db.execute(select(Developer).where(Developer.id == project.developer_id))).scalar_one_or_none()
+    if dev:
+        developer_name = dev.company_name
+
+    # Check old date (if not recorded, just say N/A or milestone.updated_at)
+    old_date = milestone.created_at.strftime("%d %b %Y") if milestone.created_at else "N/A"
+    new_date = milestone.delay_new_date.strftime("%d %b %Y") if milestone.delay_new_date else "TBD"
+
     for buyer in buyers:
         try:
             await send_email(
@@ -152,10 +192,13 @@ async def send_milestone_notification(milestone_id: str, event: str, db: AsyncSe
                 template_name=template,
                 template_context={
                     "first_name": buyer.full_name or "Buyer",
+                    "developer_company_name": developer_name,
                     "project_name": project.name,
                     "milestone_name": milestone.name,
-                    "reason": milestone.delay_reason or "Unforeseen delays",
-                    "new_date": milestone.delay_new_date.strftime("%d %b %Y") if milestone.delay_new_date else "TBD",
+                    "old_date": old_date,
+                    "new_date": new_date,
+                    "reason": milestone.delay_reason or "",
+                    "project_page_url": f"https://buildtrack.co.ke/project/{project.project_code}",
                 },
             )
         except Exception as e:

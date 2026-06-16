@@ -1,0 +1,10 @@
+{% extends "_base.html.j2" %}
+
+{% block content %}
+<p>Dear {{ first_name }},</p>
+<p>Your registration for {{ project_name }} is confirmed. Your buyer portal is now active.</p>
+<p>Access your project at:</p>
+<p><a href="{{ portal_link }}">{{ portal_link }}</a></p>
+<p>You will receive an email notification each time a new verified construction update is posted for {{ project_name }}.</p>
+<p>The BuildTrack Team<br>buildtrack.co.ke</p>
+{% endblock %}

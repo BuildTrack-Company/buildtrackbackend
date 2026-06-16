@@ -59,3 +59,10 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DelayRequest(BaseModel):
+    milestone_id: str
+    delay_reason: str
+    new_date: Optional[datetime] = None
+

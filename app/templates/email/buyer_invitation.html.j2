@@ -1,38 +1,21 @@
 {% extends "_base.html.j2" %}
-{% block title %}You Now Have Access to Track Construction Progress — {{ project_name }}{% endblock %}
 
 {% block content %}
-<div class="greeting">Dear {{ first_name }},</div>
-
-<p><strong>{{ developer_name }}</strong> has given you access to BuildTrack to monitor construction progress on <strong>{{ project_name }}</strong>.</p>
-
+<p>Dear {{ first_name }},</p>
+<p>{{ developer_name }} has given you access to BuildTrack to monitor construction progress on {{ project_name }}.</p>
 <p>BuildTrack gives you a permanent, verified record of every construction update throughout your build. You can check progress at any time without needing to contact the sales team.</p>
-
-<div class="datacard">
-    <p style="margin-bottom: 0;"><strong>Your project page is live now at:</strong><br>
-    <a href="{{ project_url }}" style="color: #14B8A6; text-decoration: none;">{{ project_url }}</a></p>
-</div>
-
+<p>Your project page is live now at:</p>
+<p><a href="{{ project_url }}">{{ project_url }}</a></p>
 <p>To access your private buyer portal, click the link below:</p>
-
-<div style="text-align: center;">
-    <a href="{{ portal_link }}" class="btn">Access Buyer Portal</a>
-</div>
-
-<hr class="divider">
-
-<p style="font-weight: 600; color: #f1f5f9;">What you will find on your portal:</p>
-<ul style="color: #94A3B8; font-size: 15px; line-height: 1.7; margin-bottom: 16px; margin-left: 20px;">
-    <li>GPS-verified construction photos from the site</li>
-    <li>Five-stage milestone progress tracker</li>
-    <li>Verified construction update records, permanently archived</li>
-    <li>Automatic notifications whenever a new update is approved</li>
+<p><a href="{{ portal_link }}">{{ portal_link }}</a></p>
+<p><strong>What you will find on your portal:</strong></p>
+<ul>
+  <li>GPS-verified construction photos from the site</li>
+  <li>Five-stage milestone progress tracker</li>
+  <li>Verified construction update records, permanently archived</li>
+  <li>Automatic notifications whenever a new update is approved</li>
 </ul>
-
 <p>Your access is private. No other buyer can see your name or details on the platform.</p>
-
-<p>If you have any questions about your portal, contact us at <a href="mailto:support@buildtrack.co.ke" style="color: #14B8A6; text-decoration: none;">support@buildtrack.co.ke</a>.</p>
-
-<p style="margin-top: 24px;">The BuildTrack Team<br>
-<a href="https://buildtrack.co.ke" style="color: #14B8A6; text-decoration: none;">buildtrack.co.ke</a></p>
+<p>If you have any questions about your portal, contact us at support@buildtrack.co.ke.</p>
+<p>The BuildTrack Team<br>buildtrack.co.ke</p>
 {% endblock %}

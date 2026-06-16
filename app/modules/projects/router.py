@@ -275,3 +275,50 @@ async def advance_project_workflow(
         getattr(request.state, "request_id", None),
     )
     return ok(data, request=request)
+
+
+@router.post("/projects/{project_id}/delay", dependencies=[require_permission("projects", "update")])
+async def log_project_delay(
+    project_id: str,
+    req: schemas.DelayRequest,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.milestones.models import Milestone
+    from app.core.exceptions import NotFoundError
+    from app.shared.audit import log_action
+    from app.modules.notifications.service import send_milestone_notification
+    
+    project = await service.get_project(db, project_id, ctx.developer_id)
+    project.health_status = "minor_delay"
+    
+    milestone = (await db.execute(select(Milestone).where(Milestone.id == req.milestone_id, Milestone.project_id == project_id))).scalar_one_or_none()
+    if not milestone:
+        raise NotFoundError("Milestone not found")
+        
+    milestone.delay_reason = req.delay_reason
+    if req.new_date:
+        milestone.delay_new_date = req.new_date
+        
+    await db.commit()
+    
+    await log_action(
+        db,
+        actor_user_id=ctx.user_id,
+        actor_role=ctx.role,
+        action="project.delay_logged",
+        entity_type="project",
+        entity_id=project.id,
+        developer_id=ctx.developer_id,
+        after={"milestone_id": req.milestone_id, "reason": req.delay_reason},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    
+    # Notify buyers
+    try:
+        await send_milestone_notification(milestone.id, "delayed", db)
+    except Exception:
+        pass
+        
+    return ok({"status": "delay_logged"}, request=request)
