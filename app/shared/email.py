@@ -52,23 +52,6 @@ def _send_via_gmail_smtp(to: str, subject: str, html_body: str) -> bool:
     return True
 
 
-def _send_via_resend(to: str, subject: str, html_body: str) -> bool:
-    if not settings.RESEND_API_KEY or settings.RESEND_API_KEY.startswith("re_placeholder"):
-        logger.warning("email_not_sent_no_key", to=to, subject=subject, reason="No valid RESEND_API_KEY")
-        return False
-    import resend
-    resend.api_key = settings.RESEND_API_KEY
-    email = resend.Emails.send({
-        "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
-        "to": [to],
-        "subject": subject,
-        "html": html_body,
-        "reply_to": settings.EMAIL_REPLY_TO,
-    })
-    logger.info("email_sent", to=to, subject=subject, email_id=email.get("id"), provider="resend")
-    return True
-
-
 async def send_email(
     to: str,
     subject: str,
@@ -76,8 +59,7 @@ async def send_email(
     template_name: Optional[str] = None,
     template_context: Optional[dict] = None,
 ) -> bool:
-    """Send an email via the configured provider (resend | gmail).
-    Same interface for all providers. Returns True on success."""
+    """Send an email using Gmail SMTP. Returns True on success."""
     import asyncio
 
     try:
@@ -87,13 +69,10 @@ async def send_email(
             logger.warning("send_email_no_body", to=to, subject=subject)
             return False
 
-        provider = (settings.EMAIL_PROVIDER or "resend").lower()
-        if provider == "gmail":
-            sent = await asyncio.to_thread(_send_via_gmail_smtp, to, subject, html_body)
-            if sent:
-                logger.info("email_sent", to=to, subject=subject, provider="gmail")
-            return sent
-        return _send_via_resend(to, subject, html_body)
+        sent = await asyncio.to_thread(_send_via_gmail_smtp, to, subject, html_body)
+        if sent:
+            logger.info("email_sent", to=to, subject=subject, provider="gmail")
+        return sent
 
     except Exception as e:
         logger.error("email_send_failed", to=to, subject=subject, error=str(e))

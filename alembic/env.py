@@ -15,10 +15,10 @@ from app.core.database import Base
 
 # Import all models so they register with Base
 from app.modules.auth.models import User, AuthTokenDenyList, PasswordResetToken, EmailVerificationCode
-from app.modules.project_types.models import WorkflowStage, ProjectType
+from app.modules.project_types.models import WorkflowStage, ProjectType, WorkflowTemplate, WorkflowTransition
 from app.modules.developers.models import Developer
 from app.modules.projects.models import Project
-from app.modules.milestones.models import Milestone
+from app.modules.milestones.models import Milestone, MilestoneApproval
 from app.modules.uploads.models import Upload, Photo, UploadSession
 from app.modules.buyers.models import Buyer
 from app.modules.notifications.models import NotificationLog
@@ -27,6 +27,9 @@ from app.modules.webhooks.models import WebhookEvent
 from app.modules.inquiries.models import Inquiry, VisibilityPageView
 from app.modules.documents.models import ProjectDocument
 from app.modules.site_visits.models import SiteVisitRequest
+from app.modules.members.models import DeveloperMember
+from app.modules.roles.models import Permission, Role, RolePermission, UserRoleAssignment
+from app.modules.settings.models import TenantSetting, SystemSetting
 
 config = context.config
 

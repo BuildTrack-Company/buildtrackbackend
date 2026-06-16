@@ -1,8 +1,8 @@
 """Add EmailVerificationCode
 
-Revision ID: 7c981a79f455
+Revision ID: 0957423bbcec
 Revises: 007
-Create Date: 2026-06-16 13:43:46.584860
+Create Date: 2026-06-16 13:55:24.529735
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '7c981a79f455'
+revision: str = '0957423bbcec'
 down_revision: Union[str, None] = '007'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -30,21 +30,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_email_verification_codes_user_id'), 'email_verification_codes', ['user_id'], unique=False)
-    op.drop_index(op.f('ix_developer_members_developer_id'), table_name='developer_members')
-    op.drop_table('developer_members')
-    op.drop_table('system_settings')
-    op.drop_index(op.f('ix_role_permissions_role_id'), table_name='role_permissions')
-    op.drop_table('role_permissions')
-    op.drop_index(op.f('ix_user_role_assignments_developer_id'), table_name='user_role_assignments')
-    op.drop_index(op.f('ix_user_role_assignments_user_id'), table_name='user_role_assignments')
-    op.drop_table('user_role_assignments')
-    op.drop_table('usage_counters')
-    op.drop_index(op.f('ix_tenant_settings_developer_id'), table_name='tenant_settings')
-    op.drop_table('tenant_settings')
-    op.drop_table('roles')
-    op.drop_index(op.f('ix_permissions_resource_action'), table_name='permissions')
-    op.drop_table('permissions')
     op.drop_table('subscription_tier_limits')
+    op.drop_table('usage_counters')
     op.drop_constraint(op.f('auth_token_deny_list_jti_key'), 'auth_token_deny_list', type_='unique')
     op.drop_index(op.f('ix_auth_token_deny_list_jti'), table_name='auth_token_deny_list')
     op.create_index(op.f('ix_auth_token_deny_list_jti'), 'auth_token_deny_list', ['jti'], unique=True)
@@ -65,6 +52,7 @@ def upgrade() -> None:
     op.drop_constraint(op.f('password_reset_tokens_token_hash_key'), 'password_reset_tokens', type_='unique')
     op.drop_index(op.f('ix_password_reset_tokens_token_hash'), table_name='password_reset_tokens')
     op.create_index(op.f('ix_password_reset_tokens_token_hash'), 'password_reset_tokens', ['token_hash'], unique=True)
+    op.drop_index(op.f('ix_permissions_resource_action'), table_name='permissions')
     op.drop_constraint(op.f('photos_upload_id_fkey'), 'photos', type_='foreignkey')
     op.drop_constraint(op.f('projects_project_code_key'), 'projects', type_='unique')
     op.drop_index(op.f('uq_projects_slug'), table_name='projects')
@@ -114,6 +102,7 @@ def downgrade() -> None:
     op.create_index(op.f('uq_projects_slug'), 'projects', ['slug'], unique=True)
     op.create_unique_constraint(op.f('projects_project_code_key'), 'projects', ['project_code'], postgresql_nulls_not_distinct=False)
     op.create_foreign_key(op.f('photos_upload_id_fkey'), 'photos', 'uploads', ['upload_id'], ['id'], ondelete='CASCADE')
+    op.create_index(op.f('ix_permissions_resource_action'), 'permissions', ['resource', 'action'], unique=False)
     op.drop_index(op.f('ix_password_reset_tokens_token_hash'), table_name='password_reset_tokens')
     op.create_index(op.f('ix_password_reset_tokens_token_hash'), 'password_reset_tokens', ['token_hash'], unique=False)
     op.create_unique_constraint(op.f('password_reset_tokens_token_hash_key'), 'password_reset_tokens', ['token_hash'], postgresql_nulls_not_distinct=False)
@@ -134,50 +123,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_auth_token_deny_list_jti'), table_name='auth_token_deny_list')
     op.create_index(op.f('ix_auth_token_deny_list_jti'), 'auth_token_deny_list', ['jti'], unique=False)
     op.create_unique_constraint(op.f('auth_token_deny_list_jti_key'), 'auth_token_deny_list', ['jti'], postgresql_nulls_not_distinct=False)
-    op.create_table('subscription_tier_limits',
-    sa.Column('tier', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('max_units', sa.INTEGER(), autoincrement=False, nullable=True),
-    sa.Column('monthly_fee_kes', sa.NUMERIC(precision=10, scale=2), server_default=sa.text('0'), autoincrement=False, nullable=False),
-    sa.Column('max_projects', sa.INTEGER(), autoincrement=False, nullable=True),
-    sa.Column('max_photos_per_upload', sa.INTEGER(), server_default=sa.text('20'), autoincrement=False, nullable=False),
-    sa.Column('max_storage_gb', sa.INTEGER(), server_default=sa.text('50'), autoincrement=False, nullable=False),
-    sa.Column('max_emails_per_month', sa.INTEGER(), server_default=sa.text('5000'), autoincrement=False, nullable=False),
-    sa.PrimaryKeyConstraint('tier', name=op.f('subscription_tier_limits_pkey'))
-    )
-    op.create_table('permissions',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('name', sa.VARCHAR(length=100), autoincrement=False, nullable=False),
-    sa.Column('description', sa.TEXT(), autoincrement=False, nullable=True),
-    sa.Column('resource', sa.VARCHAR(length=50), autoincrement=False, nullable=False),
-    sa.Column('action', sa.VARCHAR(length=50), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.PrimaryKeyConstraint('id', name=op.f('permissions_pkey')),
-    sa.UniqueConstraint('name', name=op.f('permissions_name_key'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_index(op.f('ix_permissions_resource_action'), 'permissions', ['resource', 'action'], unique=False)
-    op.create_table('roles',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('name', sa.VARCHAR(length=100), autoincrement=False, nullable=False),
-    sa.Column('description', sa.TEXT(), autoincrement=False, nullable=True),
-    sa.Column('is_system', sa.BOOLEAN(), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.PrimaryKeyConstraint('id', name=op.f('roles_pkey')),
-    sa.UniqueConstraint('name', name=op.f('roles_name_key'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_table('tenant_settings',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('developer_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('key', sa.VARCHAR(length=100), autoincrement=False, nullable=False),
-    sa.Column('value', sa.TEXT(), autoincrement=False, nullable=True),
-    sa.Column('updated_by', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.ForeignKeyConstraint(['developer_id'], ['developers.id'], name=op.f('tenant_settings_developer_id_fkey')),
-    sa.PrimaryKeyConstraint('id', name=op.f('tenant_settings_pkey')),
-    sa.UniqueConstraint('developer_id', 'key', name=op.f('uq_tenant_setting'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_index(op.f('ix_tenant_settings_developer_id'), 'tenant_settings', ['developer_id'], unique=False)
     op.create_table('usage_counters',
     sa.Column('developer_id', sa.VARCHAR(), autoincrement=False, nullable=False),
     sa.Column('billing_period_start', sa.DATE(), server_default=sa.text('CURRENT_DATE'), autoincrement=False, nullable=False),
@@ -189,65 +134,16 @@ def downgrade() -> None:
     sa.Column('last_recalculated_at', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), autoincrement=False, nullable=False),
     sa.PrimaryKeyConstraint('developer_id', name=op.f('usage_counters_pkey'))
     )
-    op.create_table('user_role_assignments',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('user_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('role_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('developer_id', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('granted_by', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('granted_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('expires_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=True),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], name=op.f('user_role_assignments_role_id_fkey')),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('user_role_assignments_user_id_fkey')),
-    sa.PrimaryKeyConstraint('id', name=op.f('user_role_assignments_pkey')),
-    sa.UniqueConstraint('user_id', 'role_id', 'developer_id', name=op.f('uq_user_role_dev'), postgresql_include=[], postgresql_nulls_not_distinct=False)
+    op.create_table('subscription_tier_limits',
+    sa.Column('tier', sa.VARCHAR(), autoincrement=False, nullable=False),
+    sa.Column('max_units', sa.INTEGER(), autoincrement=False, nullable=True),
+    sa.Column('monthly_fee_kes', sa.NUMERIC(precision=10, scale=2), server_default=sa.text('0'), autoincrement=False, nullable=False),
+    sa.Column('max_projects', sa.INTEGER(), autoincrement=False, nullable=True),
+    sa.Column('max_photos_per_upload', sa.INTEGER(), server_default=sa.text('20'), autoincrement=False, nullable=False),
+    sa.Column('max_storage_gb', sa.INTEGER(), server_default=sa.text('50'), autoincrement=False, nullable=False),
+    sa.Column('max_emails_per_month', sa.INTEGER(), server_default=sa.text('5000'), autoincrement=False, nullable=False),
+    sa.PrimaryKeyConstraint('tier', name=op.f('subscription_tier_limits_pkey'))
     )
-    op.create_index(op.f('ix_user_role_assignments_user_id'), 'user_role_assignments', ['user_id'], unique=False)
-    op.create_index(op.f('ix_user_role_assignments_developer_id'), 'user_role_assignments', ['developer_id'], unique=False)
-    op.create_table('role_permissions',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('role_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('permission_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.ForeignKeyConstraint(['permission_id'], ['permissions.id'], name=op.f('role_permissions_permission_id_fkey')),
-    sa.ForeignKeyConstraint(['role_id'], ['roles.id'], name=op.f('role_permissions_role_id_fkey')),
-    sa.PrimaryKeyConstraint('id', name=op.f('role_permissions_pkey')),
-    sa.UniqueConstraint('role_id', 'permission_id', name=op.f('uq_role_permissions'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_index(op.f('ix_role_permissions_role_id'), 'role_permissions', ['role_id'], unique=False)
-    op.create_table('system_settings',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('key', sa.VARCHAR(length=100), autoincrement=False, nullable=False),
-    sa.Column('value', sa.TEXT(), autoincrement=False, nullable=True),
-    sa.Column('description', sa.TEXT(), autoincrement=False, nullable=True),
-    sa.Column('updated_by', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('updated_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.PrimaryKeyConstraint('id', name=op.f('system_settings_pkey')),
-    sa.UniqueConstraint('key', name=op.f('system_settings_key_key'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_table('developer_members',
-    sa.Column('id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('developer_id', sa.VARCHAR(), autoincrement=False, nullable=False),
-    sa.Column('user_id', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('org_role', sa.VARCHAR(length=50), autoincrement=False, nullable=False),
-    sa.Column('invited_by', sa.VARCHAR(), autoincrement=False, nullable=True),
-    sa.Column('invited_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('joined_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=True),
-    sa.Column('is_active', sa.BOOLEAN(), autoincrement=False, nullable=False),
-    sa.Column('created_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=False),
-    sa.Column('invitation_token', sa.VARCHAR(length=64), autoincrement=False, nullable=True),
-    sa.Column('invitation_token_expires_at', postgresql.TIMESTAMP(timezone=True), autoincrement=False, nullable=True),
-    sa.Column('invitation_status', sa.VARCHAR(length=20), server_default=sa.text("'active'::character varying"), autoincrement=False, nullable=False),
-    sa.Column('invited_email', sa.VARCHAR(length=255), autoincrement=False, nullable=True),
-    sa.ForeignKeyConstraint(['developer_id'], ['developers.id'], name=op.f('developer_members_developer_id_fkey')),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('developer_members_user_id_fkey')),
-    sa.PrimaryKeyConstraint('id', name=op.f('developer_members_pkey')),
-    sa.UniqueConstraint('developer_id', 'user_id', name=op.f('uq_developer_member'), postgresql_include=[], postgresql_nulls_not_distinct=False),
-    sa.UniqueConstraint('invitation_token', name=op.f('developer_members_invitation_token_key'), postgresql_include=[], postgresql_nulls_not_distinct=False)
-    )
-    op.create_index(op.f('ix_developer_members_developer_id'), 'developer_members', ['developer_id'], unique=False)
     op.drop_index(op.f('ix_email_verification_codes_user_id'), table_name='email_verification_codes')
     op.drop_table('email_verification_codes')
     # ### end Alembic commands ###
