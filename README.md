@@ -7,6 +7,10 @@
 ![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?style=flat&logo=pydantic&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-22c55e?style=flat)
 
+<br>
+<img src="./docs-preview.png" alt="BuildTrack API Swagger Docs Preview" width="800">
+<br>
+
 REST API for BuildTrack. Property developers upload GPS-verified construction photos; a BuildTrack admin reviews and approves them before buyers can see any update.
 
 ## What it does
