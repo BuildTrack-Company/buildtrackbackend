@@ -28,16 +28,17 @@ REST API for BuildTrack. Property developers upload GPS-verified construction ph
 | Database | PostgreSQL via Neon |
 | Migrations | Alembic |
 | Storage | Cloudinary (signed direct uploads) |
-| Email | Resend |
+| Email | smtplib using Gmail SMTP |
 | Validation | Pydantic v2 |
 | Logging | structlog |
+| Hosting & CI/CD | Render (Automatic deploys via GitHub pushes) |
 
 ## Local setup
 
 Requires Python 3.12, a PostgreSQL database (Neon free tier works), a Cloudinary account, and a Resend account.
 
 ```bash
-git clone https://github.com/KimutaiLawrence/buildtrackbackend.git
+git clone https://github.com/BuildTrack-Company/buildtrackbackend.git
 cd buildtrackbackend
 
 python -m venv .venv
@@ -47,7 +48,7 @@ python -m venv .venv
 pip install -e .
 
 cp .env.example .env
-# Edit .env and fill in every value
+# Edit .env and fill in every value (including GMAIL_APP_PASSWORD)
 
 alembic upgrade head
 python scripts/seed_dev.py
@@ -56,6 +57,14 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Interactive API docs: `http://localhost:8000/docs`
+
+## Scripts
+
+Helpful utility scripts are stored in the `scripts/` directory:
+- `scripts/seed_dev.py` - Seeds initial database mock data
+- `scripts/test_emails.py` - Tests the SMTP email pipeline
+- `scripts/trigger_emails.py` - Triggers manual email notifications
+- `scripts/test_templates.py` - Validates email Jinja templates
 
 ## Environment variables
 
