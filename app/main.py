@@ -84,3 +84,14 @@ async def healthz():
 @app.get("/readyz", tags=["health"])
 async def readyz():
     return {"status": "ok"}
+
+
+@app.get("/", tags=["root"])
+async def root():
+    return {
+        "api": "BuildTrack REST API",
+        "status": "online",
+        "environment": settings.ENVIRONMENT,
+        "documentation": "/docs",
+        "message": "Welcome to the BuildTrack API. Please refer to the documentation for available endpoints."
+    }

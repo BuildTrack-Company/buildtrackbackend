@@ -1,0 +1,21 @@
+{% extends "email/_base.html.j2" %}
+{% block title %}Verify your BuildTrack Email{% endblock %}
+
+{% block content %}
+<div class="greeting">Hello {{ first_name }},</div>
+
+<p>Welcome to BuildTrack. Please verify your email address to access your portal.</p>
+
+<p>Your verification code is:</p>
+
+<div class="datacard" style="text-align: center; margin: 24px 0;">
+    <h2 style="color: #14B8A6; font-size: 32px; letter-spacing: 4px; margin: 0;">{{ otp_code }}</h2>
+</div>
+
+<p>This code will expire in 15 minutes.</p>
+
+<p>If you didn't create an account with BuildTrack, you can safely ignore this email.</p>
+
+<p style="margin-top: 24px;">The BuildTrack Team<br>
+<a href="https://buildtrack.co.ke" style="color: #14B8A6; text-decoration: none;">buildtrack.co.ke</a></p>
+{% endblock %}

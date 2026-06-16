@@ -87,3 +87,7 @@ class RegisterBuyerByCodeRequest(BaseModel):
         if not validate_password_strength(v):
             raise ValueError("Password must be at least 10 characters with at least 1 digit or special character")
         return v
+
+
+class VerifyEmailRequest(BaseModel):
+    code: str

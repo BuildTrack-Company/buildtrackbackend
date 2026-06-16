@@ -6,7 +6,7 @@ import hashlib
 import secrets
 import structlog
 
-from app.modules.auth.models import User, AuthTokenDenyList, PasswordResetToken
+from app.modules.auth.models import User, AuthTokenDenyList, PasswordResetToken, EmailVerificationCode
 from app.modules.auth.schemas import RegisterDeveloperRequest, LoginRequest
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
@@ -225,4 +225,65 @@ async def confirm_password_reset(db: AsyncSession, token: str, new_password: str
     user.hashed_password = hash_password(new_password)
     user.updated_at = datetime.now(timezone.utc)
     reset_token.used_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+async def send_verification_otp(db: AsyncSession, user: User):
+    """Generate and send 6-digit OTP for email verification."""
+    # Expire existing tokens
+    from sqlalchemy import update
+    await db.execute(
+        update(EmailVerificationCode).where(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.used_at.is_(None)
+        ).values(used_at=datetime.now(timezone.utc))
+    )
+
+    code = "".join(secrets.choice("0123456789") for _ in range(6))
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    otp_record = EmailVerificationCode(
+        id=new_id(),
+        user_id=user.id,
+        code_hash=code_hash,
+        expires_at=expires_at
+    )
+    db.add(otp_record)
+    await db.commit()
+
+    await send_email(
+        to=user.email,
+        subject="Verify your BuildTrack Email",
+        template_name="email_verification.html.j2",
+        template_context={
+            "first_name": user.full_name or user.email,
+            "otp_code": code,
+        }
+    )
+
+
+async def verify_email_otp(db: AsyncSession, user_id: str, code: str):
+    """Verify the 6-digit OTP."""
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    result = await db.execute(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.user_id == user_id,
+            EmailVerificationCode.code_hash == code_hash,
+            EmailVerificationCode.used_at.is_(None),
+            EmailVerificationCode.expires_at > datetime.now(timezone.utc)
+        )
+    )
+    otp_record = result.scalar_one_or_none()
+    
+    if not otp_record:
+        raise ValidationError("Invalid or expired verification code")
+        
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+        
+    user.email_verified = True
+    otp_record.used_at = datetime.now(timezone.utc)
     await db.commit()

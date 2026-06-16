@@ -1,0 +1,29 @@
+{% extends "email/_base.html.j2" %}
+{% block title %}Milestone Date Revision — {{ project_name }} — {{ milestone_name }}{% endblock %}
+
+{% block content %}
+<div class="greeting">Dear {{ first_name }},</div>
+
+<p><strong>{{ developer_name }}</strong> has updated the target date for a construction milestone on <strong>{{ project_name }}</strong>.</p>
+
+<div class="datacard">
+    <p style="margin-bottom: 8px;"><strong>Milestone:</strong> {{ milestone_name }}</p>
+    <p style="margin-bottom: 8px;"><strong>Previous date:</strong> {{ old_date }}</p>
+    <p style="margin-bottom: 0;"><strong>Revised date:</strong> <span style="color: #14B8A6; font-weight: 600;">{{ new_date }}</span></p>
+</div>
+
+{% if reason %}
+<p style="margin-top: 16px; font-style: italic;">Reason provided: "{{ reason }}"</p>
+{% endif %}
+
+<p style="margin-top: 24px;">Your project page has been updated to reflect this change. All previous and future updates remain archived at:</p>
+
+<div style="text-align: center;">
+    <a href="{{ project_url }}" class="btn">View Project Page</a>
+</div>
+
+<p>If you have questions about this revision, contact the {{ developer_name }} sales team directly through your project page.</p>
+
+<p style="margin-top: 24px;">The BuildTrack Team<br>
+<a href="https://buildtrack.co.ke" style="color: #14B8A6; text-decoration: none;">buildtrack.co.ke</a></p>
+{% endblock %}

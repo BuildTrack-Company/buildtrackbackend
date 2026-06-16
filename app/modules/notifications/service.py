@@ -59,15 +59,14 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
             try:
                 sent = await send_email(
                     to=buyer.email,
-                    subject=f"New site photos uploaded: {project.name}",
-                    template_name="upload_notification.html.j2",
+                    subject=f"Construction Update: {project.name}",
+                    template_name="buyer_update_notification.html.j2",
                     template_context={
-                        "full_name": buyer.full_name or buyer.email,
+                        "first_name": buyer.full_name or "Buyer",
                         "project_name": project.name,
-                        "upload_id": upload_id,
-                        "photo_count": upload.photo_count,
-                        "caption": upload.caption,
-                        "uploaded_at": upload.created_at,
+                        "update_title": upload.title or "New Site Photos",
+                        "update_description": upload.caption or "New photos have been uploaded to track construction progress.",
+                        "view_link": f"https://buildtrack.co.ke/project/{project.project_code}",
                     },
                 )
 
@@ -78,8 +77,8 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                     developer_id=upload.developer_id,
                     notification_type="email",
                     recipient_email=buyer.email,
-                    subject=f"New site photos uploaded: {project.name}",
-                    template_name="upload_notification.html.j2",
+                    subject=f"Construction Update: {project.name}",
+                    template_name="buyer_update_notification.html.j2",
                     status="sent" if sent else "failed",
                 )
                 db.add(log_entry)
@@ -136,12 +135,12 @@ async def send_milestone_notification(milestone_id: str, event: str, db: AsyncSe
 
     template_map = {
         "completed": "milestone_complete.html.j2",
-        "delayed": "delay_notification.html.j2",
+        "delayed": "milestone_revision.html.j2",
     }
     template = template_map.get(event, "milestone_complete.html.j2")
     subject_map = {
         "completed": f"Milestone completed: {milestone.name}",
-        "delayed": f"Milestone delayed: {milestone.name}",
+        "delayed": f"Schedule Update: {milestone.name} — {project.name}",
     }
     subject = subject_map.get(event, f"Milestone update: {milestone.name}")
 
@@ -152,11 +151,11 @@ async def send_milestone_notification(milestone_id: str, event: str, db: AsyncSe
                 subject=subject,
                 template_name=template,
                 template_context={
-                    "full_name": buyer.full_name or buyer.email,
+                    "first_name": buyer.full_name or "Buyer",
                     "project_name": project.name,
                     "milestone_name": milestone.name,
-                    "delay_reason": milestone.delay_reason,
-                    "new_date": milestone.delay_new_date,
+                    "reason": milestone.delay_reason or "Unforeseen delays",
+                    "new_date": milestone.delay_new_date.strftime("%d %b %Y") if milestone.delay_new_date else "TBD",
                 },
             )
         except Exception as e:

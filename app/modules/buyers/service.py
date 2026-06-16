@@ -74,14 +74,14 @@ async def invite_buyer(
 
     await send_email(
         to=buyer.email,
-        subject=f"You're invited to view {project.name}",
-        template_name="invitation.html.j2",
+        subject=f"You Now Have Access to Track Construction Progress — {project.name}",
+        template_name="buyer_invitation.html.j2",
         template_context={
-            "full_name": buyer.full_name or buyer.email,
+            "first_name": buyer.full_name or "Buyer",
+            "developer_name": company_name,
             "project_name": project.name,
-            "company_name": company_name,
-            "invitation_token": token,
-            "expires_days": 7,
+            "project_url": f"https://buildtrack.co.ke/project/{project.project_code}",
+            "portal_link": f"https://buildtrack.co.ke/register?token={token}",
         },
     )
 
@@ -160,14 +160,14 @@ async def resend_invitation(db: AsyncSession, buyer_id: str, project_id: str, de
 
     await send_email(
         to=buyer.email,
-        subject=f"You're invited to view {project.name}",
-        template_name="invitation.html.j2",
+        subject=f"You Now Have Access to Track Construction Progress — {project.name}",
+        template_name="buyer_invitation.html.j2",
         template_context={
-            "full_name": buyer.full_name or buyer.email,
+            "first_name": buyer.full_name or "Buyer",
+            "developer_name": "BuildTrack",
             "project_name": project.name,
-            "company_name": "BuildTrack",
-            "invitation_token": token,
-            "expires_days": 7,
+            "project_url": f"https://buildtrack.co.ke/project/{project.project_code}",
+            "portal_link": f"https://buildtrack.co.ke/register?token={token}",
         },
     )
 
@@ -263,6 +263,18 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
     )
     db.add(buyer)
     await db.commit()
+
+    await send_email(
+        to=email,
+        subject=f"Your BuildTrack Access is Confirmed — {project.name}",
+        template_name="buyer_self_registration.html.j2",
+        template_context={
+            "first_name": req.full_name,
+            "project_name": project.name,
+            "portal_link": f"https://buildtrack.co.ke/dashboard",
+        },
+    )
+
     return user
 
 

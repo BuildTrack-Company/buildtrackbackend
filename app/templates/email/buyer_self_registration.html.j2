@@ -1,0 +1,19 @@
+{% extends "email/_base.html.j2" %}
+{% block title %}Your BuildTrack Access is Confirmed — {{ project_name }}{% endblock %}
+
+{% block content %}
+<div class="greeting">Dear {{ first_name }},</div>
+
+<p>Your registration for <strong>{{ project_name }}</strong> is confirmed. Your buyer portal is now active.</p>
+
+<p>Access your project at:</p>
+
+<div class="datacard">
+    <a href="{{ portal_link }}" style="color: #14B8A6; text-decoration: none;">{{ portal_link }}</a>
+</div>
+
+<p style="margin-top: 24px;">You will receive an email notification each time a new verified construction update is posted for {{ project_name }}.</p>
+
+<p style="margin-top: 24px;">The BuildTrack Team<br>
+<a href="https://buildtrack.co.ke" style="color: #14B8A6; text-decoration: none;">buildtrack.co.ke</a></p>
+{% endblock %}

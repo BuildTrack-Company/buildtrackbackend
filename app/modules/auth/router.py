@@ -19,6 +19,7 @@ async def register_developer(
     db: AsyncSession = Depends(get_db),
 ):
     user = await service.register_developer(db, req)
+    await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
@@ -209,6 +210,7 @@ async def register_buyer_by_code(
     """Self-register as a buyer by entering a public project code (no invitation email required)."""
     from app.modules.buyers.service import register_buyer_by_code as _register
     user = await _register(db, req)
+    await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
@@ -276,6 +278,7 @@ async def register_buyer_by_invitation(
 ):
     from app.modules.buyers.service import accept_invitation
     user = await accept_invitation(db, token, req)
+    await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
@@ -340,3 +343,29 @@ async def accept_member_invitation(
         max_age=14 * 24 * 60 * 60,
     )
     return response
+
+
+@router.post("/verify-email")
+async def verify_email(
+    req: schemas.VerifyEmailRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify email using 6-digit OTP."""
+    await service.verify_email_otp(db, current_user.id, req.code)
+    return ok({"message": "Email verified successfully"}, request=request)
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resend 6-digit OTP."""
+    if current_user.email_verified:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Email is already verified")
+    await service.send_verification_otp(db, current_user)
+    return ok({"message": "Verification code sent to your email"}, request=request)

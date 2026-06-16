@@ -14,7 +14,8 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import all models so they register with Base
-from app.modules.auth.models import User, AuthTokenDenyList, PasswordResetToken
+from app.modules.auth.models import User, AuthTokenDenyList, PasswordResetToken, EmailVerificationCode
+from app.modules.project_types.models import WorkflowStage, ProjectType
 from app.modules.developers.models import Developer
 from app.modules.projects.models import Project
 from app.modules.milestones.models import Milestone
