@@ -4,6 +4,8 @@ from sqlalchemy import select, func
 from typing import Optional
 
 from app.modules.developers.models import Developer
+from app.shared.email import send_email
+import asyncio
 from app.modules.auth.models import User
 from app.modules.projects.models import Project
 from app.modules.buyers.models import Buyer
@@ -53,6 +55,25 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
     db.add(developer)
     await db.commit()
     await db.refresh(developer)
+
+    # Send credentials email in the background
+    try:
+        asyncio.create_task(send_email(
+            to=req.email.lower(),
+            subject="Welcome to BuildTrack - Developer Account",
+            template_name="developer_credentials.html.j2",
+            template_context={
+                "full_name": req.full_name,
+                "company_name": req.company_name,
+                "email": req.email.lower(),
+                "temporary_password": req.password,
+                "login_url": "https://buildtrack.co.ke/login/developer"
+            }
+        ))
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to send developer credential email: {e}")
+
     return developer
 
 
