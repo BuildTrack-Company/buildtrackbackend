@@ -51,7 +51,7 @@ async def finalize_upload(
         request_id=getattr(request.state, "request_id", None),
     )
 
-    background_tasks.add_task(_fanout_notifications, upload_id=upload.id)
+    background_tasks.add_task(_notify_admin_new_upload, upload_id=upload.id)
 
     return ok(schemas.UploadResponse.model_validate(upload).model_dump(), request=request)
 
@@ -72,18 +72,42 @@ async def resend_upload_emails(
     if not upload:
         raise NotFoundError("Upload not found")
 
-    background_tasks.add_task(_fanout_notifications, upload_id=upload.id)
+    background_tasks.add_task(_notify_admin_new_upload, upload_id=upload.id)
     return ok({"queued": True, "upload_id": upload_id}, request=request)
 
 
-async def _fanout_notifications(upload_id: str):
+async def _notify_admin_new_upload(upload_id: str):
     try:
-        from app.modules.notifications.service import fanout_upload_notifications
         from app.core.database import async_session_factory
+        from sqlalchemy import select
+        from app.modules.projects.models import Project
+        from app.modules.developers.models import Developer
+        from app.shared.email import send_email
+        from app.core.config import settings
+
         async with async_session_factory() as db:
-            await fanout_upload_notifications(upload_id, db)
+            result = await db.execute(select(Upload).where(Upload.id == upload_id))
+            upload = result.scalar_one_or_none()
+            if not upload:
+                return
+
+            project = (await db.execute(select(Project).where(Project.id == upload.project_id))).scalar_one_or_none()
+            dev = (await db.execute(select(Developer).where(Developer.id == upload.developer_id))).scalar_one_or_none()
+            
+            project_name = project.name if project else "Unknown Project"
+            company_name = dev.company_name if dev else "Unknown Developer"
+
+            await send_email(
+                to=settings.EMAIL_FROM_ADDRESS, # Admin's email
+                subject=f"New Upload Pending Review: {project_name}",
+                template_name="admin_new_upload.html.j2",
+                template_context={
+                    "company_name": company_name,
+                    "project_name": project_name,
+                }
+            )
     except Exception as e:
-        logger.error("fanout_failed", upload_id=upload_id, error=str(e))
+        logger.error("admin_notify_failed", upload_id=upload_id, error=str(e))
 
 
 @router.get("/projects/{project_id}/uploads", dependencies=[require_permission("photos", "read")])

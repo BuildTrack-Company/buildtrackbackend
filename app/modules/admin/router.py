@@ -289,6 +289,10 @@ async def review_upload(
     elif req.action == "reject":
         upload.status = "rejected"
         upload.flag_reason = req.reason
+        
+        # Notify developer of rejection in background
+        import asyncio
+        asyncio.create_task(_notify_developer_rejection(upload.id, req.reason))
 
     upload.reviewed_at = datetime.now(timezone.utc)
     upload.reviewed_by = current_user.id
@@ -383,3 +387,44 @@ async def get_stats(
 ):
     stats = await service.get_platform_stats(db)
     return ok(stats, request=request)
+
+
+async def _notify_developer_rejection(upload_id: str, reason: str):
+    from app.core.database import async_session_factory
+    from sqlalchemy import select
+    from app.modules.projects.models import Project
+    from app.modules.developers.models import Developer
+    from app.modules.auth.models import User
+    from app.shared.email import send_email
+    import logging
+
+    try:
+        async with async_session_factory() as db:
+            from app.modules.uploads.models import Upload
+            result = await db.execute(select(Upload).where(Upload.id == upload_id))
+            upload = result.scalar_one_or_none()
+            if not upload:
+                return
+
+            project = (await db.execute(select(Project).where(Project.id == upload.project_id))).scalar_one_or_none()
+            dev = (await db.execute(select(Developer).where(Developer.id == upload.developer_id))).scalar_one_or_none()
+            user = (await db.execute(select(User).where(User.id == dev.user_id))).scalar_one_or_none() if dev else None
+            
+            if not user:
+                return
+
+            project_name = project.name if project else "Unknown Project"
+            company_name = dev.company_name if dev else "Developer"
+
+            await send_email(
+                to=user.email,
+                subject=f"Upload Revision Required: {project_name}",
+                template_name="developer_upload_rejected.html.j2",
+                template_context={
+                    "company_name": company_name,
+                    "project_name": project_name,
+                    "reason": reason,
+                }
+            )
+    except Exception as e:
+        logging.error(f"failed to send upload rejection email: {e}")
