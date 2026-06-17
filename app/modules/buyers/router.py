@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -155,7 +155,7 @@ async def get_buyer_project(
         "developer_company": developer.company_name if developer else None,
         "developer_years_operating": developer.years_operating if developer else None,
         "developer_projects_completed": developer.projects_completed if developer else None,
-        "developer_description": developer.company_description if developer else None,
+        "developer_description": developer.company_overview if developer else None,
         "location_label": project.location_name,
         "unit_count": project.total_units or 0,
         "unit_number": buyer.unit_number,
@@ -323,3 +323,57 @@ async def update_notification_preferences(
         "notification_sms": buyer.notification_sms,
         "notification_whatsapp": buyer.notification_whatsapp,
     }, request=request)
+
+
+@router.post("/projects/{project_id}/buyers/csv", status_code=201, dependencies=[require_permission("buyers", "create")])
+async def import_buyers_csv(
+    project_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk-invite buyers from an uploaded CSV (columns: name, email, phone / unit optional)."""
+    import csv as _csv
+    import io
+
+    raw = (await file.read()).decode("utf-8-sig", errors="ignore")
+    reader = _csv.DictReader(io.StringIO(raw))
+    items: list[schemas.BuyerInviteRequest] = []
+    parse_errors: list[str] = []
+
+    def pick(row: dict, *keys: str) -> str | None:
+        for k in keys:
+            for rk, rv in row.items():
+                if rk and rk.strip().lower() == k:
+                    return (rv or "").strip() or None
+        return None
+
+    for i, row in enumerate(reader, start=2):
+        email = pick(row, "email", "e-mail")
+        if not email:
+            continue
+        try:
+            items.append(schemas.BuyerInviteRequest(
+                email=email,
+                full_name=pick(row, "name", "full_name", "fullname"),
+                phone=pick(row, "phone", "phone_number", "mobile"),
+                unit_number=pick(row, "unit", "unit_number", "unit_no"),
+            ))
+        except Exception as e:  # noqa: BLE001
+            parse_errors.append(f"Row {i}: {e}")
+
+    if not items:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("No valid buyer rows found in CSV (expected an 'email' column)")
+
+    buyers, errors = await service.bulk_invite_buyers(
+        db, project_id, ctx.developer_id, schemas.BulkInviteRequest(buyers=items)
+    )
+    return ok(
+        {
+            "invited": [schemas.BuyerResponse.model_validate(b).model_dump() for b in buyers],
+            "errors": parse_errors + list(errors),
+        },
+        request=request,
+    )

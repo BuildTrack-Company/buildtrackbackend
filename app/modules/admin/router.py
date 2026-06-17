@@ -13,8 +13,14 @@ from app.modules.buyers.models import Buyer
 from app.modules.buyers.schemas import BuyerResponse
 from app.modules.uploads.models import Upload
 from app.modules.uploads.schemas import UploadResponse
-from app.modules.admin.models import AuditLog
+from app.modules.admin.models import AuditLog, AdminIpAllowlist
 from app.modules.admin.schemas import AuditLogResponse
+from app.modules.developers.models import Developer
+from app.modules.notifications.models import NotificationLog
+from app.modules.milestones.models import Milestone
+from app.modules.milestones.schemas import MilestoneResponse
+from app.core.security import hash_password, verify_password
+from app.core.exceptions import NotFoundError, ValidationError
 from app.shared.response import ok, paginated
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -428,3 +434,282 @@ async def _notify_developer_rejection(upload_id: str, reason: str):
             )
     except Exception as e:
         logging.error(f"failed to send upload rejection email: {e}")
+
+
+# ============================================================
+# Notification log (frontend calls /admin/notifications)
+# ============================================================
+@router.get("/notifications")
+async def list_notifications(
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    status: str | None = None,
+    channel: str | None = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    offset = (page - 1) * limit
+    stmt = select(NotificationLog)
+    count_stmt = select(func.count()).select_from(NotificationLog)
+    if status:
+        stmt = stmt.where(NotificationLog.status == status)
+        count_stmt = count_stmt.where(NotificationLog.status == status)
+    if channel:
+        stmt = stmt.where(NotificationLog.notification_type == channel)
+        count_stmt = count_stmt.where(NotificationLog.notification_type == channel)
+    stmt = stmt.order_by(NotificationLog.created_at.desc()).offset(offset).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+    count = (await db.execute(count_stmt)).scalar_one()
+    data = [
+        {
+            "id": n.id,
+            "recipient_email": n.recipient_email,
+            "channel": n.notification_type,
+            "subject": n.subject,
+            "template_name": n.template_name,
+            "status": n.status,
+            "error_message": n.error_message,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in rows
+    ]
+    return paginated(data, count, page, limit, request=request)
+
+
+# ============================================================
+# Subscriptions (developers viewed through a billing lens)
+# ============================================================
+@router.get("/subscriptions")
+async def list_subscriptions(
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    status: str | None = None,
+    tier: str | None = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    offset = (page - 1) * limit
+    stmt = select(Developer).where(Developer.deleted_at.is_(None))
+    count_stmt = select(func.count()).select_from(Developer).where(Developer.deleted_at.is_(None))
+    if status:
+        stmt = stmt.where(Developer.subscription_status == status)
+        count_stmt = count_stmt.where(Developer.subscription_status == status)
+    if tier:
+        stmt = stmt.where(Developer.subscription_tier == tier)
+        count_stmt = count_stmt.where(Developer.subscription_tier == tier)
+    stmt = stmt.order_by(Developer.created_at.desc()).offset(offset).limit(limit)
+    devs = (await db.execute(stmt)).scalars().all()
+    count = (await db.execute(count_stmt)).scalar_one()
+    data = [
+        {
+            "developer_id": d.id,
+            "developer_name": d.company_name,
+            "tier": d.subscription_tier,
+            "status": d.subscription_status,
+            "trial_ends_at": d.trial_ends_at.isoformat() if d.trial_ends_at else None,
+            "current_period_end": d.subscription_expires_at.isoformat() if d.subscription_expires_at else None,
+            "storage_used_mb": 0,
+        }
+        for d in devs
+    ]
+    return paginated(data, count, page, limit, request=request)
+
+
+# ============================================================
+# Admin IP allow-list CRUD (frontend uses cidr/label aliases)
+# ============================================================
+@router.get("/settings/ip-allowlist")
+async def list_ip_allowlist(
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(select(AdminIpAllowlist).order_by(AdminIpAllowlist.created_at.desc()))).scalars().all()
+    data = [{"id": r.id, "cidr": r.ip_address, "label": r.description} for r in rows]
+    return ok(data, request=request)
+
+
+@router.post("/settings/ip-allowlist", status_code=201)
+async def add_ip_allowlist(
+    req: dict,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    cidr = (req.get("cidr") or "").strip()
+    if not cidr:
+        raise ValidationError("cidr is required")
+    entry = AdminIpAllowlist(ip_address=cidr, description=req.get("label"))
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return ok({"id": entry.id, "cidr": entry.ip_address, "label": entry.description}, request=request)
+
+
+@router.delete("/settings/ip-allowlist/{ip_id}", status_code=204)
+async def delete_ip_allowlist(
+    ip_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    entry = (await db.execute(select(AdminIpAllowlist).where(AdminIpAllowlist.id == ip_id))).scalar_one_or_none()
+    if not entry:
+        raise NotFoundError("IP allow-list entry not found")
+    await db.delete(entry)
+    await db.commit()
+
+
+# ============================================================
+# Admin profile (name + optional password change)
+# ============================================================
+@router.patch("/profile")
+async def update_admin_profile(
+    req: dict,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user = (await db.execute(select(User).where(User.id == current_user.id))).scalar_one()
+    if req.get("full_name"):
+        user.full_name = req["full_name"].strip()
+    new_password = req.get("new_password")
+    if new_password:
+        current_password = req.get("current_password") or ""
+        if not verify_password(current_password, user.hashed_password):
+            raise ValidationError("Current password is incorrect")
+        if len(new_password) < 8:
+            raise ValidationError("New password must be at least 8 characters")
+        user.hashed_password = hash_password(new_password)
+    await db.commit()
+    await db.refresh(user)
+    return ok({"id": user.id, "full_name": user.full_name, "email": user.email}, request=request)
+
+
+# ============================================================
+# Buyer removal (soft delete)
+# ============================================================
+@router.delete("/buyers/{buyer_id}", status_code=204)
+async def delete_buyer(
+    buyer_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import datetime, timezone
+    buyer = (await db.execute(select(Buyer).where(Buyer.id == buyer_id, Buyer.deleted_at.is_(None)))).scalar_one_or_none()
+    if not buyer:
+        raise NotFoundError("Buyer not found")
+    buyer.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+# ============================================================
+# Project milestones (admin, cross-tenant)
+# ============================================================
+@router.get("/projects/{project_id}/milestones")
+async def admin_project_milestones(
+    project_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.order_index)
+    )).scalars().all()
+    return ok([MilestoneResponse.model_validate(m).model_dump() for m in rows], request=request)
+
+
+# ============================================================
+# Developer detail (admin)
+# ============================================================
+@router.get("/developers/{developer_id}")
+async def get_developer_detail(
+    developer_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    dev = (await db.execute(
+        select(Developer).where(Developer.id == developer_id, Developer.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not dev:
+        raise NotFoundError("Developer not found")
+    project_count = (await db.execute(
+        select(func.count()).select_from(Project).where(
+            Project.developer_id == developer_id, Project.deleted_at.is_(None)
+        )
+    )).scalar_one()
+    buyer_count = (await db.execute(
+        select(func.count()).select_from(Buyer)
+        .join(Project, Project.id == Buyer.project_id)
+        .where(Project.developer_id == developer_id, Buyer.deleted_at.is_(None))
+    )).scalar_one()
+    data = {
+        "id": dev.id,
+        "user_id": dev.user_id,
+        "company_name": dev.company_name,
+        "contact_person_name": dev.contact_name,
+        "contact_phone": getattr(dev, "contact_phone", None),
+        "company_description": dev.company_overview,
+        "years_operating": dev.years_operating,
+        "projects_completed": dev.projects_completed,
+        "website": dev.website,
+        "address": dev.address,
+        "logo_url": dev.logo_url,
+        "subscription_tier": dev.subscription_tier,
+        "subscription_status": dev.subscription_status,
+        "subscription_expires_at": dev.subscription_expires_at.isoformat() if dev.subscription_expires_at else None,
+        "trial_ends_at": dev.trial_ends_at.isoformat() if dev.trial_ends_at else None,
+        "project_count": project_count,
+        "buyer_count": buyer_count,
+        "created_at": dev.created_at.isoformat() if dev.created_at else None,
+    }
+    return ok(data, request=request)
+
+
+# ============================================================
+# Project detail (admin)
+# ============================================================
+@router.get("/projects/{project_id}")
+async def get_project_detail(
+    project_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not proj:
+        raise NotFoundError("Project not found")
+    dev = (await db.execute(select(Developer).where(Developer.id == proj.developer_id))).scalar_one_or_none()
+    buyer_count = (await db.execute(
+        select(func.count()).select_from(Buyer).where(
+            Buyer.project_id == project_id, Buyer.deleted_at.is_(None)
+        )
+    )).scalar_one()
+    milestone_count = (await db.execute(
+        select(func.count()).select_from(Milestone).where(Milestone.project_id == project_id)
+    )).scalar_one()
+    completed_milestones = (await db.execute(
+        select(func.count()).select_from(Milestone).where(
+            Milestone.project_id == project_id, Milestone.status == "complete"
+        )
+    )).scalar_one()
+    data = {
+        "id": proj.id,
+        "name": proj.name,
+        "status": proj.status,
+        "location": proj.location_name,
+        "total_units": proj.total_units or 0,
+        "project_code": proj.project_code,
+        "developer_id": proj.developer_id,
+        "developer_name": dev.company_name if dev else None,
+        "buyer_count": buyer_count,
+        "milestone_count": milestone_count,
+        "completed_milestones": completed_milestones,
+        "construction_progress": proj.construction_progress,
+        "created_at": proj.created_at.isoformat() if proj.created_at else None,
+    }
+    return ok(data, request=request)

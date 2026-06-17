@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -322,3 +322,129 @@ async def log_project_delay(
         pass
         
     return ok({"status": "delay_logged"}, request=request)
+
+
+# ============================================================
+# Latest-update panel — email preview + one-click send to buyers
+# ============================================================
+@router.get("/projects/{project_id}/latest-update/preview", dependencies=[require_permission("buyers", "read")])
+async def latest_update_preview(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.uploads.models import Upload, Photo
+    from app.modules.buyers.models import Buyer
+    from app.modules.uploads import service as upload_service
+    from app.core.exceptions import NotFoundError
+
+    project = await service.get_project(db, project_id, ctx.developer_id)
+    if not project:
+        raise NotFoundError("Project not found")
+
+    upload = (await db.execute(
+        select(Upload)
+        .where(Upload.project_id == project_id, Upload.status == "approved")
+        .order_by(Upload.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if upload is None:
+        upload = (await db.execute(
+            select(Upload).where(Upload.project_id == project_id)
+            .order_by(Upload.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+
+    recipient_count = (await db.execute(
+        select(func.count()).select_from(Buyer).where(
+            Buyer.project_id == project_id,
+            Buyer.deleted_at.is_(None),
+            Buyer.notification_email.is_(True),
+        )
+    )).scalar_one()
+
+    if upload is None:
+        return ok({
+            "subject": f"Construction Update — {project.name}",
+            "body_html": "<p>No site updates have been published yet.</p>",
+            "body_text": "No site updates have been published yet.",
+            "recipient_count": recipient_count,
+            "whatsapp_message": "",
+            "has_update": False,
+        }, request=request)
+
+    photos = (await db.execute(
+        select(Photo).where(Photo.upload_id == upload.id).order_by(Photo.order_index)
+    )).scalars().all()
+
+    caption = upload.caption or upload.title or "New progress on site."
+    progress = upload.progress_at_upload or project.construction_progress or 0
+    subject = f"Construction Update — {project.name}"
+    body_text = (
+        f"{project.name}\n\nProgress: {progress}%\n\n{caption}\n\n"
+        f"{len(photos)} new photo(s) added. Log in to BuildTrack to view the full update."
+    )
+    body_html = (
+        f"<h2>{project.name}</h2>"
+        f"<p><strong>Progress:</strong> {progress}%</p>"
+        f"<p>{caption}</p>"
+        f"<p>{len(photos)} new photo(s) added. Log in to BuildTrack to view the full update.</p>"
+    )
+    try:
+        whatsapp_message = upload_service.generate_whatsapp_draft(upload, project.name, photos)
+    except Exception:  # noqa: BLE001
+        whatsapp_message = f"{project.name} — {progress}% complete. {caption}"
+
+    return ok({
+        "subject": subject,
+        "body_html": body_html,
+        "body_text": body_text,
+        "recipient_count": recipient_count,
+        "whatsapp_message": whatsapp_message,
+        "has_update": True,
+        "upload_id": upload.id,
+    }, request=request)
+
+
+@router.post("/projects/{project_id}/latest-update/send", dependencies=[require_permission("buyers", "notify")])
+async def latest_update_send(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.uploads.models import Upload
+    from app.modules.buyers.models import Buyer
+    from app.core.exceptions import NotFoundError, ValidationError
+
+    project = await service.get_project(db, project_id, ctx.developer_id)
+    if not project:
+        raise NotFoundError("Project not found")
+
+    upload = (await db.execute(
+        select(Upload).where(Upload.project_id == project_id, Upload.status == "approved")
+        .order_by(Upload.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if upload is None:
+        raise ValidationError("No approved update available to send")
+
+    recipient_count = (await db.execute(
+        select(func.count()).select_from(Buyer).where(
+            Buyer.project_id == project_id,
+            Buyer.deleted_at.is_(None),
+            Buyer.notification_email.is_(True),
+        )
+    )).scalar_one()
+
+    try:
+        from app.modules.notifications.service import fanout_upload_notifications
+        await fanout_upload_notifications(upload.id, db)
+    except Exception:  # noqa: BLE001
+        pass
+
+    await log_action(
+        db, actor_user_id=ctx.user_id, actor_role=ctx.role,
+        action="project.latest_update.sent", entity_type="project", entity_id=project_id,
+        developer_id=ctx.developer_id, after={"upload_id": upload.id, "recipients": recipient_count},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    return ok({"sent": True, "recipient_count": recipient_count, "upload_id": upload.id}, request=request)
