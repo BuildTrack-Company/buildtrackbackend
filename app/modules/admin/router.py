@@ -311,7 +311,7 @@ async def review_upload(
         db,
         actor_user_id=current_user.id,
         actor_role=current_user.role,
-        action=f"upload.{req.action}d",
+        action=f"upload.{'approved' if req.action == 'approve' else 'rejected'}",
         entity_type="upload",
         entity_id=upload_id,
         developer_id=upload.developer_id,
@@ -418,10 +418,20 @@ async def list_audit_log(
     )
     logs = result.scalars().all()
     count = (await db.execute(select(func.count()).select_from(AuditLog))).scalar_one()
-    return paginated(
-        [AuditLogResponse.model_validate(l).model_dump() for l in logs],
-        count, page, limit, request=request,
-    )
+
+    # Resolve actor emails in one batched query so the UI can show who did what.
+    actor_ids = {l.actor_user_id for l in logs if l.actor_user_id}
+    email_by_id: dict[str, str] = {}
+    if actor_ids:
+        rows = (await db.execute(select(User.id, User.email).where(User.id.in_(actor_ids)))).all()
+        email_by_id = {r.id: r.email for r in rows}
+
+    items = []
+    for l in logs:
+        data = AuditLogResponse.model_validate(l).model_dump()
+        data["actor_email"] = email_by_id.get(l.actor_user_id)
+        items.append(data)
+    return paginated(items, count, page, limit, request=request)
 
 
 @router.get("/stats")
@@ -432,6 +442,15 @@ async def get_stats(
 ):
     stats = await service.get_platform_stats(db)
     return ok(stats, request=request)
+
+
+@router.get("/analytics")
+async def get_analytics(
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return ok(await service.get_platform_analytics(db), request=request)
 
 
 async def _notify_developer_rejection(upload_id: str, reason: str):

@@ -129,3 +129,55 @@ async def get_platform_stats(db: AsyncSession) -> dict:
         "flagged_uploads": row["flagged_uploads"],
         "pending_uploads": row["pending_uploads"],
     }
+
+
+async def get_platform_analytics(db: AsyncSession) -> dict:
+    """Breakdowns for the admin dashboard charts (uploads, project health, top projects)."""
+    from sqlalchemy import text
+
+    upload_rows = (await db.execute(text(
+        "SELECT status, count(*) AS c FROM uploads GROUP BY status"
+    ))).mappings().all()
+    uploads_by_status = {r["status"]: r["c"] for r in upload_rows}
+
+    health_rows = (await db.execute(text(
+        "SELECT health_status, count(*) AS c FROM projects WHERE deleted_at IS NULL GROUP BY health_status"
+    ))).mappings().all()
+    projects_by_health = {r["health_status"]: r["c"] for r in health_rows}
+
+    tier_rows = (await db.execute(text(
+        "SELECT subscription_tier, count(*) AS c FROM developers WHERE deleted_at IS NULL GROUP BY subscription_tier"
+    ))).mappings().all()
+    developers_by_tier = {r["subscription_tier"]: r["c"] for r in tier_rows}
+
+    top_rows = (await db.execute(text(
+        """
+        SELECT p.name AS name, count(b.id) AS buyers
+        FROM projects p
+        LEFT JOIN buyers b ON b.project_id = p.id AND b.deleted_at IS NULL
+        WHERE p.deleted_at IS NULL
+        GROUP BY p.id, p.name
+        ORDER BY buyers DESC
+        LIMIT 6
+        """
+    ))).mappings().all()
+    top_projects_by_buyers = [{"name": r["name"], "buyers": r["buyers"]} for r in top_rows]
+
+    # Approved uploads per day, last 14 days (activity trend)
+    trend_rows = (await db.execute(text(
+        """
+        SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day, count(*) AS c
+        FROM uploads
+        WHERE created_at >= now() - interval '14 days'
+        GROUP BY day ORDER BY day
+        """
+    ))).mappings().all()
+    uploads_trend = [{"day": r["day"], "count": r["c"]} for r in trend_rows]
+
+    return {
+        "uploads_by_status": uploads_by_status,
+        "projects_by_health": projects_by_health,
+        "developers_by_tier": developers_by_tier,
+        "top_projects_by_buyers": top_projects_by_buyers,
+        "uploads_trend": uploads_trend,
+    }
