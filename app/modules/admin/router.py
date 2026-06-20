@@ -173,15 +173,25 @@ async def list_buyers(
     request: Request,
     page: int = 1,
     limit: int = 20,
+    project_id: str | None = None,
+    developer_id: str | None = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
+    conditions = [Buyer.deleted_at.is_(None)]
+    if project_id:
+        conditions.append(Buyer.project_id == project_id)
+    if developer_id:
+        # buyers belong to projects owned by this developer
+        conditions.append(Buyer.project_id.in_(
+            select(Project.id).where(Project.developer_id == developer_id)
+        ))
     result = await db.execute(
-        select(Buyer).where(Buyer.deleted_at.is_(None)).offset(offset).limit(limit)
+        select(Buyer).where(*conditions).order_by(Buyer.created_at.desc()).offset(offset).limit(limit)
     )
     buyers = result.scalars().all()
-    count = (await db.execute(select(func.count()).select_from(Buyer).where(Buyer.deleted_at.is_(None)))).scalar_one()
+    count = (await db.execute(select(func.count()).select_from(Buyer).where(*conditions))).scalar_one()
     return paginated(
         [BuyerResponse.model_validate(b).model_dump() for b in buyers],
         count, page, limit, request=request,
@@ -201,18 +211,27 @@ async def list_uploads(
     return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
 
 
-async def _query_uploads(db: AsyncSession, offset: int, limit: int, where=None):
+async def _query_uploads(db: AsyncSession, offset: int, limit: int, where=None,
+                         project_id: str | None = None, developer_id: str | None = None):
     """One joined query for uploads + project name + developer name (no N+1)."""
     from app.modules.developers.models import Developer
+    conditions = []
+    if where is not None:
+        conditions.append(where)
+    if project_id:
+        conditions.append(Upload.project_id == project_id)
+    if developer_id:
+        conditions.append(Upload.developer_id == developer_id)
+
     stmt = (
         select(Upload, Project.name, Developer.company_name)
         .outerjoin(Project, Project.id == Upload.project_id)
         .outerjoin(Developer, Developer.id == Upload.developer_id)
     )
     count_stmt = select(func.count()).select_from(Upload)
-    if where is not None:
-        stmt = stmt.where(where)
-        count_stmt = count_stmt.where(where)
+    for c in conditions:
+        stmt = stmt.where(c)
+        count_stmt = count_stmt.where(c)
     stmt = stmt.order_by(Upload.created_at.desc()).offset(offset).limit(limit)
     rows = (await db.execute(stmt)).all()
     count = (await db.execute(count_stmt)).scalar_one()
@@ -238,12 +257,17 @@ async def list_pending_uploads(
     request: Request,
     page: int = 1,
     limit: int = 20,
+    project_id: str | None = None,
+    developer_id: str | None = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """All uploads awaiting admin review."""
     offset = (page - 1) * limit
-    rows_result, count = await _query_uploads(db, offset, limit, where=(Upload.status == "pending"))
+    rows_result, count = await _query_uploads(
+        db, offset, limit, where=(Upload.status == "pending"),
+        project_id=project_id, developer_id=developer_id,
+    )
     return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
 
 
