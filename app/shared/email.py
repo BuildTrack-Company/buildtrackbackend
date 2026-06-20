@@ -38,17 +38,25 @@ def _send_via_gmail_smtp(to: str, subject: str, html_body: str) -> bool:
         logger.warning("gmail_not_configured", reason="No GMAIL_APP_PASSWORD")
         return False
 
+    # SMTP auth user must be the Gmail account that owns the app password.
+    # Fall back to the from-address for backwards compatibility.
+    smtp_user = getattr(settings, "SMTP_USER", "") or settings.EMAIL_FROM_ADDRESS
+    # Gmail only honours a "from" that matches the authenticated account (or a
+    # verified alias); use the auth user as the envelope/header sender so mail
+    # is never silently rejected, while keeping the friendly display name.
+    from_address = smtp_user
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>"
+    msg["From"] = f"{settings.EMAIL_FROM_NAME} <{from_address}>"
     msg["To"] = to
     msg["Reply-To"] = settings.EMAIL_REPLY_TO
     msg.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
         server.starttls()
-        server.login(settings.EMAIL_FROM_ADDRESS, settings.GMAIL_APP_PASSWORD)
-        server.sendmail(settings.EMAIL_FROM_ADDRESS, [to], msg.as_string())
+        server.login(smtp_user, settings.GMAIL_APP_PASSWORD)
+        server.sendmail(from_address, [to], msg.as_string())
     return True
 
 

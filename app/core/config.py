@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     GMAIL_APP_PASSWORD: str = ""
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
+    # SMTP auth username. Defaults to the Gmail account that owns the app
+    # password. Kept separate from EMAIL_FROM_ADDRESS so the visible "from"
+    # can differ without breaking Gmail login.
+    SMTP_USER: str = "buildtrack.ke@gmail.com"
     EMAIL_FROM_ADDRESS: str = "buildtrack.ke@gmail.com"
     EMAIL_FROM_NAME: str = "BuildTrack"
     EMAIL_REPLY_TO: str = "support@buildtrack.co.ke"
