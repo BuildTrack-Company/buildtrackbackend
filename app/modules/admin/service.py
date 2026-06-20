@@ -56,9 +56,12 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
     await db.commit()
     await db.refresh(developer)
 
-    # Send credentials email in the background
+    # Send credentials email in the background (if admin enabled welcome emails)
+    from app.modules.settings.service import is_notification_enabled
+    welcome_enabled = await is_notification_enabled(db, "notify_developer_welcome")
     try:
-        asyncio.create_task(send_email(
+        if welcome_enabled:
+            asyncio.create_task(send_email(
             to=req.email.lower(),
             subject="Welcome to BuildTrack - Developer Account",
             template_name="developer_credentials.html.j2",

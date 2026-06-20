@@ -17,6 +17,37 @@ TENANT_SETTING_DEFAULTS: Dict[str, Optional[str]] = {
 }
 
 
+# Platform-wide notification switches, managed by the admin. These act as a
+# master gate on top of each developer's per-tenant preferences.
+SYSTEM_SETTING_DEFAULTS: Dict[str, dict] = {
+    "notify_buyer_on_approval": {
+        "value": "true",
+        "description": "Email registered buyers when a construction update is approved",
+    },
+    "notify_developer_on_rejection": {
+        "value": "true",
+        "description": "Email the developer when an upload is rejected",
+    },
+    "notify_buyer_on_milestone_revision": {
+        "value": "true",
+        "description": "Email buyers when a milestone target date is revised",
+    },
+    "notify_developer_welcome": {
+        "value": "true",
+        "description": "Send the welcome + credentials emails to new developers",
+    },
+}
+
+
+async def is_notification_enabled(db: AsyncSession, key: str, default: bool = True) -> bool:
+    """Check a platform-level notification switch. Missing key => default."""
+    result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if setting is None or setting.value is None:
+        return default
+    return str(setting.value).strip().lower() in ("true", "1", "yes", "on")
+
+
 async def get_tenant_settings(db: AsyncSession, developer_id: str) -> List[dict]:
     result = await db.execute(
         select(TenantSetting).where(TenantSetting.developer_id == developer_id).order_by(TenantSetting.key)
@@ -71,10 +102,22 @@ async def bulk_update_tenant_settings(db: AsyncSession, developer_id: str, updat
 
 async def get_system_settings(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(SystemSetting).order_by(SystemSetting.key))
-    return [
-        {"key": s.key, "value": s.value, "description": s.description, "updated_at": s.updated_at}
-        for s in result.scalars().all()
-    ]
+    stored = {s.key: s for s in result.scalars().all()}
+
+    settings = []
+    # Always surface the known platform defaults so the admin can manage them
+    # even before they have ever been written to the DB.
+    for key, meta in SYSTEM_SETTING_DEFAULTS.items():
+        if key in stored:
+            s = stored.pop(key)
+            settings.append({"key": s.key, "value": s.value, "description": s.description or meta["description"], "updated_at": s.updated_at})
+        else:
+            now = datetime.now(timezone.utc)
+            settings.append({"key": key, "value": meta["value"], "description": meta["description"], "updated_at": now})
+    # Append any other stored settings not covered by defaults
+    for s in stored.values():
+        settings.append({"key": s.key, "value": s.value, "description": s.description, "updated_at": s.updated_at})
+    return settings
 
 
 async def update_system_setting(db: AsyncSession, key: str, value: Optional[str], description: Optional[str], updated_by: str) -> dict:

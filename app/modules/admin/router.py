@@ -296,9 +296,11 @@ async def review_upload(
         upload.status = "rejected"
         upload.flag_reason = req.reason
         
-        # Notify developer of rejection in background
-        import asyncio
-        asyncio.create_task(_notify_developer_rejection(upload.id, req.reason))
+        # Notify developer of rejection in background (if admin enabled it)
+        from app.modules.settings.service import is_notification_enabled
+        if await is_notification_enabled(db, "notify_developer_on_rejection"):
+            import asyncio
+            asyncio.create_task(_notify_developer_rejection(upload.id, req.reason))
 
     upload.reviewed_at = datetime.now(timezone.utc)
     upload.reviewed_by = current_user.id
@@ -317,15 +319,52 @@ async def review_upload(
         request_id=getattr(request.state, "request_id", None),
     )
 
-    # On approval, fan out buyer notifications if requested (best effort, after commit)
+    # On approval, fan out buyer notifications if requested (best effort, after
+    # commit) and only when the admin has buyer-approval emails enabled.
     if req.action == "approve" and req.send_notification:
-        try:
-            from app.modules.notifications.service import fanout_upload_notifications
-            await fanout_upload_notifications(upload.id, db)
-        except Exception:
-            pass
+        from app.modules.settings.service import is_notification_enabled
+        if await is_notification_enabled(db, "notify_buyer_on_approval"):
+            try:
+                from app.modules.notifications.service import fanout_upload_notifications
+                await fanout_upload_notifications(upload.id, db)
+            except Exception:
+                pass
 
     return ok(UploadResponse.model_validate(upload).model_dump(), request=request)
+
+
+@router.get("/uploads/{upload_id}")
+async def get_admin_upload_detail(
+    upload_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full upload detail for the admin review queue, including the actual
+    photos with per-image GPS coordinates and capture timestamp."""
+    from app.modules.uploads.models import Photo
+    from app.shared.storage import get_signed_url
+
+    upload = (await db.execute(select(Upload).where(Upload.id == upload_id))).scalar_one_or_none()
+    if not upload:
+        raise NotFoundError("Upload not found")
+
+    photos = (await db.execute(
+        select(Photo).where(Photo.upload_id == upload_id).order_by(Photo.order_index)
+    )).scalars().all()
+
+    data = UploadResponse.model_validate(upload).model_dump()
+    data["photos"] = [
+        {
+            "id": p.id,
+            "signed_url": get_signed_url(p.cloudinary_public_id),
+            "capture_latitude": p.capture_latitude,
+            "capture_longitude": p.capture_longitude,
+            "created_at": p.created_at,
+        }
+        for p in photos
+    ]
+    return ok(data, request=request)
 
 
 @router.post("/projects/{project_id}/independent-verification")
