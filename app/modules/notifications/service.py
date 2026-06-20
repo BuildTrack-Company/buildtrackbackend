@@ -136,6 +136,24 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
         total=len(buyers),
     )
 
+    # Verification copy to the platform admin once buyer emails have gone out.
+    if success_count:
+        try:
+            from app.core.config import settings
+            await send_email(
+                to=settings.EMAIL_REPLY_TO or "support@buildtrack.co.ke",
+                subject=f"Update published: {project.name} — {success_count} buyer email(s) sent",
+                html_body=(
+                    f"<p>An approved construction update for <strong>{project.name}</strong> "
+                    f"({developer_name}) was published.</p>"
+                    f"<p>{success_count} buyer notification email(s) sent"
+                    f"{f', {fail_count} failed' if fail_count else ''}. Update: "
+                    f"{upload.title or 'New site photos'}.</p>"
+                ),
+            )
+        except Exception as e:  # best effort
+            logger.warning("admin_fanout_confirmation_failed", error=str(e))
+
 
 async def send_milestone_notification(milestone_id: str, event: str, db: AsyncSession):
     """Send milestone-related notifications to buyers."""
