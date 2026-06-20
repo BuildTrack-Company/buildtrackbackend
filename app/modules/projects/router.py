@@ -21,8 +21,70 @@ async def list_projects(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    from sqlalchemy import case
+    from app.modules.buyers.models import Buyer
+    from app.modules.milestones.models import Milestone
+    from app.modules.uploads.models import Upload, Photo
+    from app.shared.storage import get_signed_url
+
     projects = await service.list_projects(db, ctx.developer_id)
-    return ok([schemas.ProjectResponse.model_validate(p).model_dump() for p in projects], request=request)
+    if not projects:
+        return ok([], request=request)
+
+    pids = [p.id for p in projects]
+
+    # Batched counts/progress/images (one query each — no per-project N+1).
+    buyer_rows = (await db.execute(
+        select(Buyer.project_id, func.count()).where(
+            Buyer.project_id.in_(pids), Buyer.deleted_at.is_(None)
+        ).group_by(Buyer.project_id)
+    )).all()
+    buyer_counts = {r[0]: r[1] for r in buyer_rows}
+
+    ms_rows = (await db.execute(
+        select(
+            Milestone.project_id,
+            func.count().label("total"),
+            func.sum(case((Milestone.status == "complete", 1), else_=0)).label("done"),
+        ).where(Milestone.project_id.in_(pids)).group_by(Milestone.project_id)
+    )).all()
+    ms_total = {r.project_id: int(r.total or 0) for r in ms_rows}
+    ms_done = {r.project_id: int(r.done or 0) for r in ms_rows}
+
+    latest = (await db.execute(
+        select(Upload.id, Upload.project_id)
+        .where(Upload.project_id.in_(pids), Upload.status == "approved")
+        .order_by(Upload.project_id, Upload.created_at.desc())
+    )).all()
+    latest_upload = {}
+    for uid, pid in latest:
+        latest_upload.setdefault(pid, uid)
+    images = {}
+    if latest_upload:
+        photo_rows = (await db.execute(
+            select(Photo.upload_id, Photo.cloudinary_public_id)
+            .where(Photo.upload_id.in_(list(latest_upload.values())))
+            .order_by(Photo.upload_id, Photo.order_index)
+        )).all()
+        photo_by_upload = {}
+        for up_id, pub in photo_rows:
+            photo_by_upload.setdefault(up_id, pub)
+        for pid, up_id in latest_upload.items():
+            if up_id in photo_by_upload:
+                images[pid] = get_signed_url(photo_by_upload[up_id], "display")
+
+    out = []
+    for p in projects:
+        data = schemas.ProjectResponse.model_validate(p).model_dump()
+        total = ms_total.get(p.id, 0)
+        done = ms_done.get(p.id, 0)
+        data["buyer_count"] = buyer_counts.get(p.id, 0)
+        data["milestone_progress"] = round((done / total) * 100) if total else (p.construction_progress or 0)
+        data["completed_milestones"] = done
+        data["milestone_count"] = total
+        data["card_image"] = images.get(p.id)
+        out.append(data)
+    return ok(out, request=request)
 
 
 @router.post("/projects", status_code=201, dependencies=[require_permission("projects", "create")])
