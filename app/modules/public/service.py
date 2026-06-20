@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 import structlog
 
 from app.modules.projects.models import Project
@@ -103,7 +103,91 @@ async def get_directory(db: AsyncSession, area: Optional[str] = None, sort: str 
         conditions.append(func.lower(Project.location_name) == area.lower())
 
     projects = (await db.execute(select(Project).where(*conditions))).scalars().all()
-    cards = [await _project_card(db, p) for p in projects]
+    if not projects:
+        return []
+
+    # --- Batched aggregates (avoid per-project N+1 round-trips to Neon) ---
+    project_ids = [p.id for p in projects]
+    dev_ids = list({p.developer_id for p in projects})
+
+    devs = {d.id: d for d in (await db.execute(
+        select(Developer).where(Developer.id.in_(dev_ids))
+    )).scalars().all()}
+
+    # Milestone totals + completed counts, grouped by project
+    ms_rows = (await db.execute(
+        select(
+            Milestone.project_id,
+            func.count().label("total"),
+            func.sum(case((Milestone.status == "complete", 1), else_=0)).label("done"),
+        ).where(Milestone.project_id.in_(project_ids)).group_by(Milestone.project_id)
+    )).all()
+    ms_total = {r.project_id: int(r.total or 0) for r in ms_rows}
+    ms_done = {r.project_id: int(r.done or 0) for r in ms_rows}
+
+    # Approved-upload counts + last/first timestamps, grouped by project
+    up_rows = (await db.execute(
+        select(
+            Upload.project_id,
+            func.count().label("cnt"),
+            func.max(Upload.created_at).label("last_at"),
+        ).where(Upload.project_id.in_(project_ids), Upload.status == "approved").group_by(Upload.project_id)
+    )).all()
+    up_cnt = {r.project_id: r.cnt for r in up_rows}
+    up_last = {r.project_id: r.last_at for r in up_rows}
+
+    # Latest approved upload id per project (for the card image)
+    latest_uploads = (await db.execute(
+        select(Upload.id, Upload.project_id, Upload.created_at)
+        .where(Upload.project_id.in_(project_ids), Upload.status == "approved")
+        .order_by(Upload.project_id, Upload.created_at.desc())
+    )).all()
+    latest_upload_by_project: dict[str, str] = {}
+    for r in latest_uploads:
+        latest_upload_by_project.setdefault(r.project_id, r.id)
+
+    # One representative photo per latest upload
+    card_images: dict[str, str] = {}
+    if latest_upload_by_project:
+        photos = (await db.execute(
+            select(Photo.upload_id, Photo.cloudinary_public_id)
+            .where(Photo.upload_id.in_(list(latest_upload_by_project.values())))
+            .order_by(Photo.upload_id, Photo.order_index)
+        )).all()
+        photo_by_upload: dict[str, str] = {}
+        for r in photos:
+            photo_by_upload.setdefault(r.upload_id, r.cloudinary_public_id)
+        for pid, uid in latest_upload_by_project.items():
+            if uid in photo_by_upload:
+                card_images[pid] = get_signed_url(photo_by_upload[uid], "display")
+
+    cards = []
+    for p in projects:
+        dev = devs.get(p.developer_id)
+        last_at = up_last.get(p.id)
+        verified_records = up_cnt.get(p.id, 0)
+        threshold = p.activity_overdue_threshold_days or 14
+        cards.append({
+            "slug": p.slug,
+            "project_name": p.name,
+            "developer_name": dev.company_name if dev else None,
+            "location": p.location_name,
+            "unit_count": p.total_units,
+            "health_status": p.health_status,
+            "construction_progress": p.construction_progress,
+            "milestone_count": ms_total.get(p.id, 0),
+            "completed_milestone_count": ms_done.get(p.id, 0),
+            "verified_records_count": verified_records,
+            "completion_date": p.estimated_completion,
+            "update_frequency_label": f"Every {threshold} days",
+            "update_frequency_days": threshold,
+            "description": p.visibility_tagline or (p.visibility_description[:140] if p.visibility_description else None),
+            "card_image": card_images.get(p.id),
+            "last_verified_at": last_at,
+            "last_verified_days_ago": _days_since(last_at),
+            "activity_status": compute_activity_status(threshold, last_at),
+            "verification_badge": "Site Progress Verified" if verified_records else "Awaiting First Update",
+        })
 
     if sort == "completion":
         cards.sort(key=lambda c: (c["completion_date"] is None, c["completion_date"]))

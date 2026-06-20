@@ -148,9 +148,22 @@ async def get_buyer_project(
         "photo_count": u.photo_count or 0,
     } for u in uploads]
 
+    # Construction health: overdue if no approved update within the agreed cadence
+    from datetime import datetime, timezone
+    threshold_days = project.activity_overdue_threshold_days or 14
+    last_update_at = max((u.created_at for u in uploads if u.created_at), default=None)
+    if last_update_at is not None:
+        ref = last_update_at if last_update_at.tzinfo else last_update_at.replace(tzinfo=timezone.utc)
+        days_since_update = (datetime.now(timezone.utc) - ref).days
+    else:
+        days_since_update = None
+    is_overdue = days_since_update is not None and days_since_update > threshold_days
+    delay_count = sum(1 for m in milestones if m.status == "delayed")
+
     payload = {
         "id": project.id,
         "name": project.name,
+        "project_code": project.project_code,
         "status": project.status,
         "developer_company": developer.company_name if developer else None,
         "developer_years_operating": developer.years_operating if developer else None,
@@ -161,6 +174,10 @@ async def get_buyer_project(
         "unit_number": buyer.unit_number,
         "construction_progress": project.construction_progress,
         "health_status": project.health_status,
+        "construction_health": "overdue" if is_overdue else "on_track",
+        "update_frequency_days": threshold_days,
+        "days_since_last_update": days_since_update,
+        "delay_count": delay_count,
         "notifications_enabled": buyer.notification_email,
         "milestones": [{
             "id": m.id, "name": m.name, "order": m.order_index, "status": m.status,
