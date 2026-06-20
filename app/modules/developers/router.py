@@ -12,6 +12,57 @@ from app.shared.response import ok
 router = APIRouter(prefix="/developers", tags=["developers"])
 
 
+@router.get("/me/buyers")
+async def list_developer_buyers(
+    request: Request,
+    project_id: str | None = None,
+    current_user: User = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+):
+    """All buyers across the developer's projects, with project names, so the
+    developer can see/filter every registered buyer in one place."""
+    from app.modules.projects.models import Project
+    from app.modules.buyers.models import Buyer
+
+    dev = await service.get_developer_by_user_id(db, current_user.id)
+
+    projects = (await db.execute(
+        select(Project.id, Project.name).where(
+            Project.developer_id == dev.id, Project.deleted_at.is_(None)
+        )
+    )).all()
+    project_name = {r[0]: r[1] for r in projects}
+    project_ids = list(project_name.keys())
+    if not project_ids:
+        return ok({"buyers": [], "projects": []}, request=request)
+
+    conditions = [Buyer.project_id.in_(project_ids), Buyer.deleted_at.is_(None)]
+    if project_id:
+        conditions.append(Buyer.project_id == project_id)
+
+    rows = (await db.execute(
+        select(Buyer).where(*conditions).order_by(Buyer.created_at.desc())
+    )).scalars().all()
+
+    buyers = [{
+        "id": b.id,
+        "full_name": b.full_name,
+        "email": b.email,
+        "phone": b.phone,
+        "unit_number": b.unit_number,
+        "project_id": b.project_id,
+        "project_name": project_name.get(b.project_id),
+        "registered": b.user_id is not None,
+        "notification_email": b.notification_email,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+    } for b in rows]
+
+    return ok({
+        "buyers": buyers,
+        "projects": [{"id": pid, "name": name} for pid, name in project_name.items()],
+    }, request=request)
+
+
 @router.get("/stats")
 async def get_developer_stats(
     request: Request,
