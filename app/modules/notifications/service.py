@@ -73,6 +73,7 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
     upload_date = upload.created_at.strftime("%d %b %Y")
     upload_time = upload.created_at.strftime("%I:%M %p")
     gps_coords = f"{upload.capture_latitude}, {upload.capture_longitude}" if upload.capture_latitude else "N/A"
+    update_subject = f"Construction Update — {project.name} — {upload.title or 'New Site Photos'}"
 
     for i in range(0, len(buyers), BATCH_SIZE):
         batch = buyers[i:i + BATCH_SIZE]
@@ -80,7 +81,7 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
             try:
                 sent = await send_email(
                     to=buyer.email,
-                    subject=f"Construction Update: {project.name}",
+                    subject=update_subject,
                     template_name="buyer_update_notification.html.j2",
                     template_context={
                         "first_name": buyer.full_name or "Buyer",
@@ -107,7 +108,7 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                     developer_id=upload.developer_id,
                     notification_type="email",
                     recipient_email=buyer.email,
-                    subject=f"Construction Update: {project.name}",
+                    subject=update_subject,
                     template_name="buyer_update_notification.html.j2",
                     status="sent" if sent else "failed",
                 )
