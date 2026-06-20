@@ -92,21 +92,20 @@ async def get_buyer_project(
     from app.shared.storage import get_signed_url
     from app.core.exceptions import NotFoundError
 
-    buyer = (await db.execute(
-        select(Buyer).where(Buyer.user_id == current_user.id, Buyer.deleted_at.is_(None))
-    )).scalar_one_or_none()
-    if not buyer:
+    # Single joined query for buyer + project + developer (saves 2 round-trips).
+    row = (await db.execute(
+        select(Buyer, Project, Developer)
+        .join(Project, Project.id == Buyer.project_id)
+        .outerjoin(Developer, Developer.id == Project.developer_id)
+        .where(
+            Buyer.user_id == current_user.id,
+            Buyer.deleted_at.is_(None),
+            Project.deleted_at.is_(None),
+        )
+    )).first()
+    if not row:
         raise NotFoundError("Buyer profile not found")
-
-    project = (await db.execute(
-        select(Project).where(Project.id == buyer.project_id, Project.deleted_at.is_(None))
-    )).scalar_one_or_none()
-    if not project:
-        raise NotFoundError("Project not found")
-
-    developer = (await db.execute(
-        select(Developer).where(Developer.id == project.developer_id)
-    )).scalar_one_or_none()
+    buyer, project, developer = row
 
     milestones = (await db.execute(
         select(Milestone).where(Milestone.project_id == project.id).order_by(Milestone.order_index)
