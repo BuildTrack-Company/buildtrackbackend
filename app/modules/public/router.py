@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
@@ -10,15 +10,21 @@ from app.shared.response import ok
 
 router = APIRouter(tags=["public"])
 
+# Public, read-only pages change slowly. Let browsers/proxies serve cached
+# copies instantly and revalidate in the background.
+_PUBLIC_CACHE = "public, max-age=30, stale-while-revalidate=300"
+
 
 @router.get("/public/directory")
 async def get_directory(
     request: Request,
+    response: Response,
     area: Optional[str] = None,
     sort: str = "latest",
     db: AsyncSession = Depends(get_db),
 ):
     cards = await service.get_directory(db, area=area, sort=sort)
+    response.headers["Cache-Control"] = _PUBLIC_CACHE
     return ok(cards, request=request)
 
 
@@ -26,9 +32,11 @@ async def get_directory(
 async def get_visibility_page(
     slug: str,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     data = await service.get_visibility_page(db, slug)
+    response.headers["Cache-Control"] = _PUBLIC_CACHE
     return ok(data, request=request)
 
 
