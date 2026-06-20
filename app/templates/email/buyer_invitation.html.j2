@@ -6,8 +6,18 @@
 <p>BuildTrack gives you a permanent, verified record of every construction update throughout your build. You can check progress at any time without needing to contact the sales team.</p>
 <p>Your project page is live now at:</p>
 <p><a href="{{ project_url }}">{{ project_url }}</a></p>
+{% if temp_password %}
+<p>You can sign in to your private buyer portal right away using these credentials:</p>
+<div class="datacard">
+  <p style="margin:0;">Login: <a href="{{ login_url }}">{{ login_url }}</a></p>
+  <p style="margin:0;">Email: <strong>{{ email }}</strong></p>
+  <p style="margin:0;">Temporary password: <strong>{{ temp_password }}</strong></p>
+</div>
+<p style="font-size:13px;color:#94A3B8;">Please change your password after your first login.</p>
+{% else %}
 <p>To access your private buyer portal, click the link below:</p>
 <p><a href="{{ portal_link }}">{{ portal_link }}</a></p>
+{% endif %}
 <p><strong>What you will find on your portal:</strong></p>
 <ul>
   <li>GPS-verified construction photos from the site</li>

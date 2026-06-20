@@ -49,8 +49,38 @@ async def invite_buyer(
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
+    # Create (or reuse) a login account so the buyer can sign in directly with a
+    # temporary password — no invitation link click required.
+    from app.modules.auth.models import User
+    from app.core.security import hash_password
+    from app.shared.code_gen import generate_temp_password
+
+    existing_user = (await db.execute(
+        select(User).where(User.email == req.email.lower())
+    )).scalar_one_or_none()
+
+    temp_password = None
+    if existing_user:
+        user_id = existing_user.id
+    else:
+        temp_password = generate_temp_password()
+        user = User(
+            id=new_id(),
+            email=req.email.lower(),
+            hashed_password=hash_password(temp_password),
+            role="buyer",
+            full_name=req.full_name,
+            phone=req.phone,
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+        user_id = user.id
+
     buyer = Buyer(
         id=new_id(),
+        user_id=user_id,
         project_id=project_id,
         email=req.email.lower(),
         full_name=req.full_name,
@@ -66,8 +96,6 @@ async def invite_buyer(
 
     # Get developer company name
     from app.modules.developers.models import Developer
-    result = await db.execute(select(Developer).where(Developer.user_id == developer_id))
-    # developer_id here is developer.user_id actually; check project
     dev_result = await db.execute(select(Developer).where(Developer.id == developer_id))
     dev = dev_result.scalar_one_or_none()
     company_name = dev.company_name if dev else "Your Developer"
@@ -82,6 +110,9 @@ async def invite_buyer(
             "project_name": project.name,
             "project_url": f"https://buildtrack.co.ke/project/{project.project_code}",
             "portal_link": f"https://buildtrack.co.ke/register?token={token}",
+            "login_url": "https://buildtrack.co.ke/login/buyer",
+            "email": buyer.email,
+            "temp_password": temp_password,
         },
     )
 
@@ -101,7 +132,44 @@ async def bulk_invite_buyers(
         except (DuplicateError, Exception) as e:
             errors.append({"email": buyer_req.email, "error": str(e)})
 
+    if buyers:
+        await _notify_buyers_added(db, project_id, developer_id, len(buyers))
+
     return buyers, errors
+
+
+async def _notify_buyers_added(db: AsyncSession, project_id: str, developer_id: str, count: int):
+    """Notify the developer (and platform admin) that buyers were added."""
+    try:
+        from app.modules.developers.models import Developer
+        from app.modules.auth.models import User
+        from app.core.config import settings
+
+        project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+        dev = (await db.execute(select(Developer).where(Developer.id == developer_id))).scalar_one_or_none()
+        dev_user = (await db.execute(select(User).where(User.id == dev.user_id))).scalar_one_or_none() if dev else None
+
+        recipients = set()
+        if dev_user and dev_user.email:
+            recipients.add(dev_user.email)
+        # Platform admin / company inbox copy
+        recipients.add(settings.EMAIL_REPLY_TO or "support@buildtrack.co.ke")
+
+        project_name = project.name if project else "your project"
+        company = dev.company_name if dev else "Developer"
+        for to in recipients:
+            await send_email(
+                to=to,
+                subject=f"{count} buyer{'s' if count != 1 else ''} added to {project_name}",
+                html_body=(
+                    f"<p>{count} buyer{'s' if count != 1 else ''} {'were' if count != 1 else 'was'} just "
+                    f"added to <strong>{project_name}</strong> ({company}). Each buyer received a portal "
+                    f"login with a temporary password.</p>"
+                    f"<p>Manage buyers from your BuildTrack portal.</p>"
+                ),
+            )
+    except Exception as e:  # best effort
+        logger.warning("notify_buyers_added_failed", error=str(e))
 
 
 async def list_buyers(db: AsyncSession, project_id: str, developer_id: str) -> List[Buyer]:
