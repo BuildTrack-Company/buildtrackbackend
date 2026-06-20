@@ -47,6 +47,11 @@ async def _project_card(db: AsyncSession, project: Project) -> dict:
     milestone_count = (await db.execute(
         select(func.count()).select_from(Milestone).where(Milestone.project_id == project.id)
     )).scalar_one()
+    completed_milestone_count = (await db.execute(
+        select(func.count()).select_from(Milestone).where(
+            Milestone.project_id == project.id, Milestone.status == "complete"
+        )
+    )).scalar_one()
     verified_records = (await db.execute(
         select(func.count()).select_from(Upload).where(
             Upload.project_id == project.id, Upload.status == "approved"
@@ -56,17 +61,18 @@ async def _project_card(db: AsyncSession, project: Project) -> dict:
     last_at = last.created_at if last else None
     activity = compute_activity_status(project.activity_overdue_threshold_days, last_at)
 
-    # Update frequency label from approved records over their span
-    if verified_records >= 2 and last_at:
-        first = (await db.execute(
-            select(Upload.created_at).where(Upload.project_id == project.id, Upload.status == "approved")
-            .order_by(Upload.created_at.asc()).limit(1)
+    # Agreed update cadence (configured with the developer), e.g. "Every 10 days".
+    threshold = project.activity_overdue_threshold_days or 14
+    freq_label = f"Every {threshold} days"
+
+    # A representative image for the card: the most recent approved site photo.
+    card_image = None
+    if last:
+        latest_photo = (await db.execute(
+            select(Photo).where(Photo.upload_id == last.id).order_by(Photo.order_index).limit(1)
         )).scalar_one_or_none()
-        span_days = max((_days_since(first) or 0), 1)
-        per_week = (verified_records / span_days) * 7
-        freq_label = f"{per_week:.1f} updates/week" if per_week >= 1 else "Periodic updates"
-    else:
-        freq_label = "New project"
+        if latest_photo:
+            card_image = get_signed_url(latest_photo.cloudinary_public_id, "display")
 
     return {
         "slug": project.slug,
@@ -77,9 +83,13 @@ async def _project_card(db: AsyncSession, project: Project) -> dict:
         "health_status": project.health_status,
         "construction_progress": project.construction_progress,
         "milestone_count": milestone_count,
+        "completed_milestone_count": completed_milestone_count,
         "verified_records_count": verified_records,
         "completion_date": project.estimated_completion,
         "update_frequency_label": freq_label,
+        "update_frequency_days": threshold,
+        "description": project.visibility_tagline or (project.visibility_description[:140] if project.visibility_description else None),
+        "card_image": card_image,
         "last_verified_at": last_at,
         "last_verified_days_ago": _days_since(last_at),
         "activity_status": activity,
