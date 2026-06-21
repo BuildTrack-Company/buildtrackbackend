@@ -224,7 +224,7 @@ async def _query_uploads(db: AsyncSession, offset: int, limit: int, where=None,
         conditions.append(Upload.developer_id == developer_id)
 
     stmt = (
-        select(Upload, Project.name, Developer.company_name)
+        select(Upload, Project.name, Project.project_code, Developer.company_name)
         .outerjoin(Project, Project.id == Upload.project_id)
         .outerjoin(Developer, Developer.id == Upload.developer_id)
     )
@@ -240,9 +240,10 @@ async def _query_uploads(db: AsyncSession, offset: int, limit: int, where=None,
 
 def _enrich_uploads(rows):
     out = []
-    for u, project_name, company_name in rows:
+    for u, project_name, project_code, company_name in rows:
         data = UploadResponse.model_validate(u).model_dump()
         data["project_name"] = project_name
+        data["project_code"] = project_code
         data["developer_name"] = company_name
         data["gps_distance_meters"] = u.distance_from_site_m
         data["fanout_status"] = u.notification_fanout_status
