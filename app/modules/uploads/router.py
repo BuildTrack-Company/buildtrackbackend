@@ -143,10 +143,36 @@ async def list_uploads(
     db: AsyncSession = Depends(get_db),
 ):
     uploads, total = await service.list_uploads(db, project_id, ctx.developer_id, page, limit)
-    return paginated(
-        [schemas.UploadResponse.model_validate(u).model_dump() for u in uploads],
-        total, page, limit, request=request,
-    )
+
+    # Attach photos + milestone name so the developer sees their progress log with images.
+    from app.modules.uploads.models import Photo
+    from app.modules.milestones.models import Milestone
+    from sqlalchemy import select
+    upload_ids = [u.id for u in uploads]
+    photos_by_upload: dict[str, list] = {}
+    if upload_ids:
+        rows = (await db.execute(select(Photo).where(Photo.upload_id.in_(upload_ids)).order_by(Photo.order_index))).scalars().all()
+        for p in rows:
+            try:
+                url = get_signed_url(p.cloudinary_public_id, "display")
+                thumb = get_signed_url(p.cloudinary_public_id, "thumbnail")
+            except Exception:
+                url = p.cloudinary_url
+                thumb = p.cloudinary_url
+            photos_by_upload.setdefault(p.upload_id, []).append({"id": p.id, "url": url, "thumbnail_url": thumb})
+    ms_ids = [u.milestone_id for u in uploads if u.milestone_id]
+    ms_names: dict[str, str] = {}
+    if ms_ids:
+        for mid, mname in (await db.execute(select(Milestone.id, Milestone.name).where(Milestone.id.in_(ms_ids)))).all():
+            ms_names[mid] = mname
+
+    data = []
+    for u in uploads:
+        d = schemas.UploadResponse.model_validate(u).model_dump()
+        d["photos"] = photos_by_upload.get(u.id, [])
+        d["milestone_name"] = ms_names.get(u.milestone_id) if u.milestone_id else None
+        data.append(d)
+    return paginated(data, total, page, limit, request=request)
 
 
 @router.get("/uploads/{upload_id}", dependencies=[require_permission("photos", "read")])

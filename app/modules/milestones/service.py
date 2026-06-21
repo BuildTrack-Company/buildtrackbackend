@@ -66,26 +66,36 @@ async def complete_milestone(
     db: AsyncSession, milestone_id: str, project_id: str, developer_id: str, notes: str = None
 ) -> Milestone:
     milestone = await get_milestone(db, milestone_id, project_id, developer_id)
-    milestone.status = "completed"
+    # Canonical completed status is "complete" — the public directory, buyer portal
+    # and seed data all read that value, so completion must write the same.
+    milestone.status = "complete"
     milestone.completed_at = datetime.now(timezone.utc)
     if notes:
         milestone.description = notes
     milestone.updated_at = datetime.now(timezone.utc)
 
-    # Update project status if all milestones complete
+    # When this milestone completes, advance the next pending one to in_progress
+    # and point the project's current workflow stage at it.
     result = await db.execute(
         select(Milestone).where(
             Milestone.project_id == project_id,
-            Milestone.status != "completed",
+            Milestone.status != "complete",
             Milestone.id != milestone_id,
-        )
+        ).order_by(Milestone.order_index)
     )
     remaining = result.scalars().all()
+    project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
     if not remaining:
-        result = await db.execute(select(Project).where(Project.id == project_id))
-        project = result.scalar_one_or_none()
         if project:
             project.status = "completed"
+            project.construction_progress = 100
+    else:
+        # Move the next milestone into progress and sync the project's workflow stage.
+        nxt = remaining[0]
+        if nxt.status == "pending":
+            nxt.status = "in_progress"
+        if project and nxt.workflow_stage_id:
+            project.current_stage_id = nxt.workflow_stage_id
 
     await db.commit()
     await db.refresh(milestone)
