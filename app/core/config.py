@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     INTERNAL_CRON_TOKEN: str = "change-me"
     ENVIRONMENT: str = "development"
+    # Comma-separated IPs whose audit details (IP, location, coords) are redacted
+    # from API responses. Configured via env so the value never lives in source.
+    AUDIT_REDACT_IPS: str = ""
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""

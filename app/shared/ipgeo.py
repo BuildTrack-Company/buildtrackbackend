@@ -11,7 +11,8 @@ import httpx
 
 logger = structlog.get_logger(__name__)
 
-_cache: dict[str, str] = {}
+# cache maps ip -> {"location": str, "lat": float|None, "lon": float|None}
+_cache: dict[str, dict] = {}
 
 
 def _is_public(ip: str) -> bool:
@@ -22,16 +23,16 @@ def _is_public(ip: str) -> bool:
         return False
 
 
-async def locate_ips(ips: Iterable[str]) -> dict[str, str]:
-    """Return {ip: "City, Country"} for the given IPs, using cache + one batch call."""
+async def locate_ips(ips: Iterable[str]) -> dict[str, dict]:
+    """Return {ip: {"location", "lat", "lon"}} for the given IPs, cached + one batch call."""
     unique = {ip for ip in ips if ip}
-    result: dict[str, str] = {}
+    result: dict[str, dict] = {}
     to_lookup: list[str] = []
     for ip in unique:
         if ip in _cache:
             result[ip] = _cache[ip]
         elif not _is_public(ip):
-            _cache[ip] = "Local / Private network"
+            _cache[ip] = {"location": "Local / Private network", "lat": None, "lon": None}
             result[ip] = _cache[ip]
         else:
             to_lookup.append(ip)
@@ -40,7 +41,7 @@ async def locate_ips(ips: Iterable[str]) -> dict[str, str]:
         return result
 
     try:
-        payload = [{"query": ip, "fields": "status,country,city,query"} for ip in to_lookup[:100]]
+        payload = [{"query": ip, "fields": "status,country,city,lat,lon,query"} for ip in to_lookup[:100]]
         async with httpx.AsyncClient(timeout=4.0) as client:
             resp = await client.post("http://ip-api.com/batch", json=payload)
             for row in resp.json():
@@ -50,13 +51,14 @@ async def locate_ips(ips: Iterable[str]) -> dict[str, str]:
                 if row.get("status") == "success":
                     city, country = row.get("city"), row.get("country")
                     label = ", ".join([p for p in (city, country) if p]) or "Unknown location"
+                    entry = {"location": label, "lat": row.get("lat"), "lon": row.get("lon")}
                 else:
-                    label = "Unknown location"
-                _cache[ip] = label
-                result[ip] = label
+                    entry = {"location": "Unknown location", "lat": None, "lon": None}
+                _cache[ip] = entry
+                result[ip] = entry
     except Exception as e:  # fail open — never break the audit view over geo
         logger.warning("ipgeo_lookup_failed", error=str(e))
         for ip in to_lookup:
-            result.setdefault(ip, "")
+            result.setdefault(ip, {"location": "", "lat": None, "lon": None})
 
     return result

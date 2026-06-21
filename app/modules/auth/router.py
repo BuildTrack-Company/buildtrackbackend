@@ -21,6 +21,11 @@ async def register_developer(
     user = await service.register_developer(db, req)
     await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -47,6 +52,11 @@ async def login_developer(
 ):
     user = await service.authenticate_user(db, req.email, req.password, "developer")
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -73,6 +83,11 @@ async def login_buyer(
 ):
     user = await service.authenticate_user(db, req.email, req.password, "buyer")
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -99,6 +114,11 @@ async def login_admin(
 ):
     user = await service.authenticate_user(db, req.email, req.password, "admin")
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -212,6 +232,11 @@ async def register_buyer_by_code(
     user = await _register(db, req)
     await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -280,6 +305,11 @@ async def register_buyer_by_invitation(
     user = await accept_invitation(db, token, req)
     await service.send_verification_otp(db, user)
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],
@@ -327,6 +357,11 @@ async def accept_member_invitation(
         return ok({"message": "Invitation accepted. Please log in with your credentials."}, request=request)
 
     tokens = await service.create_tokens(user)
+    from app.shared.audit import log_action
+    await log_action(
+        db, actor_user_id=user.id, actor_role=user.role, action="auth.login",
+        entity_type="user", entity_id=user.id, after={"email": user.email},
+    )
     response_data = {
         "user": schemas.UserResponse.model_validate(user).model_dump(),
         "access_token": tokens["access_token"],

@@ -47,7 +47,14 @@ async def finalize_upload(
         entity_type="upload",
         entity_id=upload.id,
         developer_id=ctx.developer_id,
-        after={"project_id": upload.project_id, "photo_count": upload.photo_count, "status": upload.status},
+        after={
+            "project_id": upload.project_id,
+            "photo_count": upload.photo_count,
+            "status": upload.status,
+            "capture_latitude": upload.capture_latitude,
+            "capture_longitude": upload.capture_longitude,
+            "within_boundary": upload.within_boundary,
+        },
         request_id=getattr(request.state, "request_id", None),
     )
 

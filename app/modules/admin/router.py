@@ -450,15 +450,36 @@ async def list_audit_log(
         rows = (await db.execute(select(User.id, User.email).where(User.id.in_(actor_ids)))).all()
         email_by_id = {r.id: r.email for r in rows}
 
-    # Resolve IP -> location once per page (cached, batched, fails open).
+    # IPs whose details are redacted from responses. Configured via env and/or a
+    # system_settings row (key=audit_redact_ips) — never hardcoded in source.
+    from app.core.config import settings
+    from app.modules.settings.models import SystemSetting
+    redacted = {ip.strip() for ip in (settings.AUDIT_REDACT_IPS or "").split(",") if ip.strip()}
+    db_setting = (await db.execute(
+        select(SystemSetting.value).where(SystemSetting.key == "audit_redact_ips")
+    )).scalar_one_or_none()
+    if db_setting:
+        redacted |= {ip.strip() for ip in db_setting.split(",") if ip.strip()}
+
+    # Resolve IP -> location/coords once per page (cached, batched, fails open).
     from app.shared.ipgeo import locate_ips
-    locations = await locate_ips([l.ip_address for l in logs if l.ip_address])
+    geo = await locate_ips([l.ip_address for l in logs if l.ip_address and l.ip_address not in redacted])
 
     items = []
     for l in logs:
         data = AuditLogResponse.model_validate(l).model_dump()
         data["actor_email"] = email_by_id.get(l.actor_user_id)
-        data["location"] = locations.get(l.ip_address) if l.ip_address else None
+        if l.ip_address and l.ip_address in redacted:
+            # Hide this actor's network details entirely.
+            data["ip_address"] = None
+            data["location"] = "Hidden"
+            data["latitude"] = None
+            data["longitude"] = None
+        else:
+            entry = geo.get(l.ip_address) if l.ip_address else None
+            data["location"] = entry["location"] if entry else None
+            data["latitude"] = entry["lat"] if entry else None
+            data["longitude"] = entry["lon"] if entry else None
         items.append(data)
     return paginated(items, count, page, limit, request=request)
 
