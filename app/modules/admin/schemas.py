@@ -33,6 +33,39 @@ class SubscriptionUpdate(BaseModel):
     subscription_status: Optional[str] = None
 
 
+class UserAdminResponse(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    role: str
+    is_active: bool
+    email_verified: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreateUserRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    role: str  # admin, developer, buyer
+    phone: Optional[str] = None
+
+
+class UpdateUserRequest(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    email_verified: Optional[bool] = None
+
+
+class SetUserPasswordRequest(BaseModel):
+    password: str
+
+
 class AdminUploadReview(BaseModel):
     action: str  # approve, reject
     reason: Optional[str] = None

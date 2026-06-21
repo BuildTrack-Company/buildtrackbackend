@@ -800,3 +800,153 @@ async def get_project_detail(
         "created_at": proj.created_at.isoformat() if proj.created_at else None,
     }
     return ok(data, request=request)
+
+
+# ============================================================
+# User management (admin) — full CRUD + password reset
+# ============================================================
+@router.get("/users")
+async def list_users(
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    search: str | None = None,
+    role: str | None = None,
+    is_active: bool | None = None,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    offset = (page - 1) * limit
+    conditions = [User.deleted_at.is_(None)]
+    if search:
+        like = f"%{search.lower()}%"
+        conditions.append(
+            func.lower(User.email).like(like) | func.lower(func.coalesce(User.full_name, "")).like(like)
+        )
+    if role:
+        conditions.append(User.role == role)
+    if is_active is not None:
+        conditions.append(User.is_active == is_active)
+
+    count = (await db.execute(select(func.count()).select_from(User).where(*conditions))).scalar_one()
+    rows = (await db.execute(
+        select(User).where(*conditions).order_by(User.created_at.desc()).offset(offset).limit(limit)
+    )).scalars().all()
+    data = [schemas.UserAdminResponse.model_validate(u).model_dump() for u in rows]
+    return paginated(data, count, page, limit, request=request)
+
+
+@router.post("/users", status_code=201)
+async def create_user(
+    req: schemas.CreateUserRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.shared.audit import log_action
+    from app.shared.ids import new_id
+
+    existing = (await db.execute(select(User).where(User.email == req.email.lower()))).scalar_one_or_none()
+    if existing:
+        raise ValidationError("A user with this email already exists")
+    if req.role not in ("admin", "developer", "buyer"):
+        raise ValidationError("role must be one of admin, developer, buyer")
+
+    user = User(
+        id=new_id(), email=req.email.lower(), hashed_password=hash_password(req.password),
+        role=req.role, full_name=req.full_name, phone=req.phone,
+        is_active=True, email_verified=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin", action="user.created",
+        entity_type="user", entity_id=user.id, after={"email": user.email, "role": user.role},
+    )
+    return ok(schemas.UserAdminResponse.model_validate(user).model_dump(), request=request)
+
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: str,
+    req: schemas.UpdateUserRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.shared.audit import log_action
+
+    user = (await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))).scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+    before = {"full_name": user.full_name, "role": user.role, "is_active": user.is_active}
+    if req.role is not None:
+        if req.role not in ("admin", "developer", "buyer"):
+            raise ValidationError("role must be one of admin, developer, buyer")
+        user.role = req.role
+    if req.full_name is not None:
+        user.full_name = req.full_name
+    if req.phone is not None:
+        user.phone = req.phone
+    if req.is_active is not None:
+        user.is_active = req.is_active
+    if req.email_verified is not None:
+        user.email_verified = req.email_verified
+    await db.commit()
+    await db.refresh(user)
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin", action="user.updated",
+        entity_type="user", entity_id=user.id, before=before,
+        after={"full_name": user.full_name, "role": user.role, "is_active": user.is_active},
+    )
+    return ok(schemas.UserAdminResponse.model_validate(user).model_dump(), request=request)
+
+
+@router.post("/users/{user_id}/password")
+async def set_user_password(
+    user_id: str,
+    req: schemas.SetUserPasswordRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.shared.audit import log_action
+
+    user = (await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))).scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+    if not req.password or len(req.password) < 8:
+        raise ValidationError("Password must be at least 8 characters")
+    user.hashed_password = hash_password(req.password)
+    await db.commit()
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin", action="user.password_reset",
+        entity_type="user", entity_id=user.id,
+    )
+    return ok({"id": user.id, "message": "Password updated"}, request=request)
+
+
+@router.delete("/users/{user_id}", status_code=200)
+async def delete_user(
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.shared.audit import log_action
+    from datetime import datetime, timezone
+
+    if user_id == current_user.id:
+        raise ValidationError("You cannot delete your own account")
+    user = (await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))).scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+    user.deleted_at = datetime.now(timezone.utc)
+    user.is_active = False
+    await db.commit()
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin", action="user.deleted",
+        entity_type="user", entity_id=user.id, before={"email": user.email},
+    )
+    return ok({"id": user_id, "message": "User deleted"}, request=request)
