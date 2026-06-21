@@ -113,6 +113,22 @@ async def _notify_admin_new_upload(upload_id: str):
                     "project_name": project_name,
                 }
             )
+
+            # In-app notification to every active admin.
+            try:
+                from app.modules.auth.models import User
+                from app.modules.notifications.inapp import create_for_users
+                admin_ids = (await db.execute(
+                    select(User.id).where(User.role == "admin", User.is_active.is_(True), User.deleted_at.is_(None))
+                )).scalars().all()
+                await create_for_users(
+                    db, admin_ids,
+                    title="New upload pending review",
+                    body=f"{company_name} submitted an update for {project_name}.",
+                    type="review", link="/uploads/flagged",
+                )
+            except Exception as e:
+                logger.warning("admin_inapp_notify_failed", error=str(e))
     except Exception as e:
         logger.error("admin_notify_failed", upload_id=upload_id, error=str(e))
 

@@ -123,6 +123,25 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                 logger.error("notification_send_failed", buyer_id=buyer.id, error=str(e))
                 fail_count += 1
 
+    # In-app notifications (bell feed) for buyers + the developer.
+    try:
+        from app.modules.notifications.inapp import create_for_users, create_notification
+        await create_for_users(
+            db, [b.user_id for b in buyers],
+            title=f"New update — {project.name}",
+            body=upload.title or "New site photos have been published.",
+            type="update", link="/project",
+        )
+        if dev and dev.user_id:
+            await create_notification(
+                db, dev.user_id,
+                title=f"Update published — {project.name}",
+                body=f"'{upload.title or 'New site photos'}' was approved and sent to {success_count} buyer(s).",
+                type="success", link=f"/projects/{project.id}",
+            )
+    except Exception as e:
+        logger.warning("inapp_notify_failed", error=str(e))
+
     # Update upload fanout status
     upload.notification_fanout_status = "complete"
     upload.notification_fanout_at = datetime.now(timezone.utc)
