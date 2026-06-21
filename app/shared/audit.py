@@ -25,7 +25,16 @@ async def log_action(
     """Log an audit action to the audit_log table."""
     try:
         from app.shared.ids import new_id
+        from app.shared.request_context import get_request_context
         import json
+
+        # Fall back to the current request's context so every audited action
+        # records who, from where (IP), and with what client — even when the
+        # caller did not pass these explicitly.
+        ctx = get_request_context()
+        ip_address = ip_address or ctx.get("client_ip")
+        user_agent = user_agent or ctx.get("user_agent")
+        request_id = request_id or ctx.get("request_id")
 
         await db.execute(
             text("""

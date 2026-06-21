@@ -13,6 +13,8 @@ class AuditLogResponse(BaseModel):
     entity_id: str
     developer_id: Optional[str]
     ip_address: Optional[str]
+    user_agent: Optional[str] = None
+    location: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

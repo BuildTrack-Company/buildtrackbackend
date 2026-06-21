@@ -450,10 +450,15 @@ async def list_audit_log(
         rows = (await db.execute(select(User.id, User.email).where(User.id.in_(actor_ids)))).all()
         email_by_id = {r.id: r.email for r in rows}
 
+    # Resolve IP -> location once per page (cached, batched, fails open).
+    from app.shared.ipgeo import locate_ips
+    locations = await locate_ips([l.ip_address for l in logs if l.ip_address])
+
     items = []
     for l in logs:
         data = AuditLogResponse.model_validate(l).model_dump()
         data["actor_email"] = email_by_id.get(l.actor_user_id)
+        data["location"] = locations.get(l.ip_address) if l.ip_address else None
         items.append(data)
     return paginated(items, count, page, limit, request=request)
 
