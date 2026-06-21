@@ -886,6 +886,31 @@ async def create_user(
         db, actor_user_id=current_user.id, actor_role="admin", action="user.created",
         entity_type="user", entity_id=user.id, after={"email": user.email, "role": user.role},
     )
+
+    # Onboarding email with login details (best-effort, never blocks creation).
+    try:
+        from app.shared.email import send_email
+        login_url = {
+            "admin": "https://admin.buildtrack.co.ke",
+            "developer": "https://buildtrack.co.ke/login/developer",
+            "buyer": "https://buildtrack.co.ke/login/buyer",
+        }.get(user.role, "https://buildtrack.co.ke")
+        html = f"""
+        <div style="font-family:Geist,Arial,sans-serif;max-width:560px;margin:auto;color:#0F172A">
+          <h2 style="color:#1E3A5F">Welcome to BuildTrack</h2>
+          <p>An account has been created for you on BuildTrack.</p>
+          <table style="border-collapse:collapse;margin:16px 0">
+            <tr><td style="padding:6px 12px;color:#475569">Portal</td><td style="padding:6px 12px"><a href="{login_url}">{login_url}</a></td></tr>
+            <tr><td style="padding:6px 12px;color:#475569">Email</td><td style="padding:6px 12px">{user.email}</td></tr>
+            <tr><td style="padding:6px 12px;color:#475569">Temporary password</td><td style="padding:6px 12px"><code>{req.password}</code></td></tr>
+            <tr><td style="padding:6px 12px;color:#475569">Role</td><td style="padding:6px 12px">{user.role.title()}</td></tr>
+          </table>
+          <p style="color:#475569;font-size:13px">Please sign in and change your password.</p>
+        </div>"""
+        await send_email(to=user.email, subject="Your BuildTrack account is ready", html_body=html)
+    except Exception:
+        pass
+
     return ok(schemas.UserAdminResponse.model_validate(user).model_dump(), request=request)
 
 
