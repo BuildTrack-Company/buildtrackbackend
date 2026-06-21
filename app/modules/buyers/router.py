@@ -134,30 +134,40 @@ async def get_buyer_project(
     # Photos for the gallery (signed Cloudinary URLs), newest first.
     upload_ids = [u.id for u in uploads]
     photos = []
+    photos_by_upload: dict[str, list] = {}
     if upload_ids:
         photo_rows = (await db.execute(
             select(Photo).where(Photo.upload_id.in_(upload_ids)).order_by(Photo.created_at.desc())
         )).scalars().all()
-        for ph in photo_rows[:40]:
+        for ph in photo_rows:
             try:
                 url = get_signed_url(ph.cloudinary_public_id, "display")
                 thumb = get_signed_url(ph.cloudinary_public_id, "thumbnail")
             except Exception:
                 url = ph.cloudinary_url
                 thumb = ph.cloudinary_url
-            photos.append({
+            entry = {
                 "id": ph.id, "url": url, "thumbnail_url": thumb,
                 "caption": None,
                 "latitude": ph.capture_latitude, "longitude": ph.capture_longitude,
                 "captured_at": ph.created_at.isoformat() if ph.created_at else None,
-            })
+            }
+            photos_by_upload.setdefault(ph.upload_id, []).append(entry)
+            if len(photos) < 40:
+                photos.append(entry)
 
     updates = [{
         "id": u.id,
         "created_at": u.created_at.isoformat() if u.created_at else None,
+        "title": u.title,
+        "category": u.category,
         "milestone_name": milestone_names.get(u.milestone_id) or u.title or u.category or "Update",
         "note": u.caption,
+        "progress_at_upload": u.progress_at_upload,
+        "latitude": u.capture_latitude,
+        "longitude": u.capture_longitude,
         "photo_count": u.photo_count or 0,
+        "photos": photos_by_upload.get(u.id, []),
     } for u in uploads]
 
     # Construction health: overdue if no approved update within the agreed cadence
