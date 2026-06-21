@@ -14,6 +14,13 @@ class BulkInviteRequest(BaseModel):
     buyers: List[BuyerInviteRequest]
 
 
+class BuyerUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    unit_number: Optional[str] = None
+    phone: Optional[str] = None
+    notification_email: Optional[bool] = None
+
+
 class BuyerResponse(BaseModel):
     id: str
     project_id: str

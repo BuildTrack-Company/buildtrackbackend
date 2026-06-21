@@ -269,6 +269,43 @@ async def remove_buyer(db: AsyncSession, buyer_id: str, project_id: str, develop
     await db.commit()
 
 
+async def update_buyer(db: AsyncSession, buyer_id: str, project_id: str, developer_id: str, req):
+    """Update an existing buyer's editable fields (tenant-scoped)."""
+    result = await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.developer_id == developer_id,
+            Project.deleted_at.is_(None),
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise NotFoundError("Project not found")
+
+    result = await db.execute(
+        select(Buyer).where(
+            Buyer.id == buyer_id,
+            Buyer.project_id == project_id,
+            Buyer.deleted_at.is_(None),
+        )
+    )
+    buyer = result.scalar_one_or_none()
+    if not buyer:
+        raise NotFoundError("Buyer not found")
+
+    if req.full_name is not None:
+        buyer.full_name = req.full_name
+    if req.unit_number is not None:
+        buyer.unit_number = req.unit_number
+    if req.phone is not None:
+        buyer.phone = req.phone
+    if req.notification_email is not None:
+        buyer.notification_email = req.notification_email
+    buyer.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(buyer)
+    return buyer
+
+
 async def register_buyer_by_code(db: AsyncSession, req) -> "User":
     """Self-register as a buyer using a public project code (Method 2 onboarding)."""
     from app.modules.auth.models import User

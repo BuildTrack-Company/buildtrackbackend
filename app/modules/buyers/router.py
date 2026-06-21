@@ -63,6 +63,19 @@ async def resend_invitation(
     return ok(schemas.BuyerResponse.model_validate(buyer).model_dump(), request=request)
 
 
+@router.patch("/projects/{project_id}/buyers/{buyer_id}", dependencies=[require_permission("buyers", "update")])
+async def update_buyer(
+    project_id: str,
+    buyer_id: str,
+    req: schemas.BuyerUpdateRequest,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    buyer = await service.update_buyer(db, buyer_id, project_id, ctx.developer_id, req)
+    return ok(schemas.BuyerResponse.model_validate(buyer).model_dump(), request=request)
+
+
 @router.delete("/projects/{project_id}/buyers/{buyer_id}", status_code=204, dependencies=[require_permission("buyers", "delete")])
 async def remove_buyer(
     project_id: str,
