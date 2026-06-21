@@ -70,7 +70,7 @@ def get_signed_url(public_id: str, transformation: str = "display") -> str:
             type="upload",
             sign_url=True,
             secure=True,
-            transformation=transform,
+            raw_transformation=transform,
         )
         return url
     except Exception as e:
