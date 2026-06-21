@@ -997,3 +997,36 @@ async def delete_user(
         entity_type="user", entity_id=user.id, before={"email": user.email},
     )
     return ok({"id": user_id, "message": "User deleted"}, request=request)
+
+
+# ============================================================
+# Admin "login as" (impersonation) — view the developer/buyer portals
+# ============================================================
+@router.post("/impersonate/{user_id}")
+async def impersonate_user(
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Issue an access token for a developer/buyer so an admin can view their portal."""
+    from app.modules.auth.service import create_tokens
+    from app.shared.audit import log_action
+
+    user = (await db.execute(
+        select(User).where(User.id == user_id, User.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+    if user.role == "admin":
+        raise ValidationError("Cannot impersonate another admin")
+
+    tokens = await create_tokens(user)
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin", action="admin.impersonate",
+        entity_type="user", entity_id=user.id, after={"email": user.email, "role": user.role},
+    )
+    return ok({
+        "access_token": tokens["access_token"],
+        "user": {"id": user.id, "email": user.email, "full_name": user.full_name, "role": user.role},
+    }, request=request)
