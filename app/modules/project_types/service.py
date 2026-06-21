@@ -19,6 +19,8 @@ def _stage_dict(s: WorkflowStage) -> dict:
         "order_index": s.order_index,
         "expected_duration_days": s.expected_duration_days,
         "requires_buyer_approval": s.requires_buyer_approval,
+        "requires_photo": s.requires_photo,
+        "requires_file": s.requires_file,
     }
 
 
@@ -269,6 +271,8 @@ async def _create_stages(db: AsyncSession, template_id: str, stages_data: list, 
             order_index=s.get("order_index", i),
             expected_duration_days=s.get("expected_duration_days"),
             requires_buyer_approval=s.get("requires_buyer_approval", False),
+            requires_photo=s.get("requires_photo", False),
+            requires_file=s.get("requires_file", False),
             created_at=now,
         )
         db.add(stage)
@@ -329,6 +333,8 @@ async def duplicate_workflow_template(db: AsyncSession, template_id: str, develo
             order_index=s.order_index,
             expected_duration_days=s.expected_duration_days,
             requires_buyer_approval=s.requires_buyer_approval,
+            requires_photo=s.requires_photo,
+            requires_file=s.requires_file,
             created_at=now,
         )
         db.add(new_stage)

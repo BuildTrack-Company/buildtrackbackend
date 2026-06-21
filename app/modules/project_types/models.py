@@ -42,6 +42,8 @@ class WorkflowStage(Base):
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     expected_duration_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     requires_buyer_approval: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    requires_photo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    requires_file: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

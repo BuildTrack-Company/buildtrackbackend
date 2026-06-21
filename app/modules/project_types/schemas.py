@@ -9,6 +9,9 @@ class WorkflowStageOut(BaseModel):
     description: Optional[str]
     order_index: int
     expected_duration_days: Optional[int]
+    requires_buyer_approval: bool = False
+    requires_photo: bool = False
+    requires_file: bool = False
 
     model_config = {"from_attributes": True}
 

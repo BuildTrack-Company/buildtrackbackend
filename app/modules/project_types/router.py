@@ -36,6 +36,8 @@ class StageIn(BaseModel):
     order_index: int
     expected_duration_days: Optional[int] = None
     requires_buyer_approval: bool = False
+    requires_photo: bool = False
+    requires_file: bool = False
 
 
 class TransitionIn(BaseModel):
