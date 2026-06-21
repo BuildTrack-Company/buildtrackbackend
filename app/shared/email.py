@@ -46,11 +46,21 @@ def _send_via_gmail_smtp(to: str, subject: str, html_body: str) -> bool:
     # is never silently rejected, while keeping the friendly display name.
     from_address = smtp_user
 
+    import re
+    from email.utils import make_msgid, formatdate
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{settings.EMAIL_FROM_NAME} <{from_address}>"
     msg["To"] = to
     msg["Reply-To"] = settings.EMAIL_REPLY_TO
+    # Explicit Date + Message-ID and a plain-text alternative materially improve
+    # spam scoring versus an HTML-only multipart.
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=from_address.split("@")[-1])
+    plain = re.sub(r"<[^>]+>", "", re.sub(r"(?is)<(script|style).*?</\1>", "", html_body))
+    plain = re.sub(r"\n\s*\n+", "\n\n", plain).strip() or "View this email in an HTML-capable client."
+    msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
     with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
