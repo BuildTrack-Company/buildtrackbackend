@@ -100,7 +100,7 @@ async def _project_card(db: AsyncSession, project: Project) -> dict:
 async def get_directory(db: AsyncSession, area: Optional[str] = None, sort: str = "latest") -> list[dict]:
     conditions = [Project.visibility_page_published == True, Project.deleted_at.is_(None)]
     if area and area.lower() != "all areas":
-        conditions.append(func.lower(Project.location_name) == area.lower())
+        conditions.append(func.lower(Project.location_name).like(f"%{area.lower()}%"))
 
     projects = (await db.execute(select(Project).where(*conditions))).scalars().all()
     if not projects:
