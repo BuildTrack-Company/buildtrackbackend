@@ -40,12 +40,13 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
     )
     buyers = result.scalars().all()
 
-    # Tier email quota check (entry of send path, brief Phase 4)
+    # Tier email quota check (entry of send path, brief Phase 4) — scoped to
+    # this upload's project, since subscriptions are per-project.
     try:
         from app.shared.quotas import assert_can_send_email
-        await assert_can_send_email(db, upload.developer_id, len(buyers))
+        await assert_can_send_email(db, upload.project_id, len(buyers))
     except Exception as e:
-        logger.warning("fanout_email_quota_exceeded", developer_id=upload.developer_id, error=str(e))
+        logger.warning("fanout_email_quota_exceeded", project_id=upload.project_id, error=str(e))
         return
 
     # Process in batches of 10

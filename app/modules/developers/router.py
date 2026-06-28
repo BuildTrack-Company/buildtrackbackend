@@ -74,6 +74,7 @@ async def get_developer_stats(
     from app.modules.projects.models import Project
     from app.modules.buyers.models import Buyer
     from app.modules.uploads.models import Upload, Photo
+    from app.modules.inquiries.models import Inquiry, VisibilityPageView
 
     dev = await service.get_developer_by_user_id(db, current_user.id)
     developer_id = dev.id
@@ -84,8 +85,25 @@ async def get_developer_stats(
     )
     project_ids = [r[0] for r in projects_result.all()]
 
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
     if not project_ids:
-        return ok({"total_buyers": 0, "active_this_week": 0, "photos_uploaded": 0, "buyer_complaints": 0}, request=request)
+        return ok({
+            "total_buyers": 0, "active_this_week": 0, "photos_uploaded": 0, "buyer_complaints": 0,
+            "new_leads_this_month": 0, "visibility_views_this_month": 0,
+        }, request=request)
+
+    new_leads_this_month = (await db.execute(
+        select(func.count()).select_from(Inquiry).where(
+            Inquiry.project_id.in_(project_ids), Inquiry.created_at >= month_start,
+        )
+    )).scalar_one()
+
+    visibility_views_this_month = (await db.execute(
+        select(func.count()).select_from(VisibilityPageView).where(
+            VisibilityPageView.project_id.in_(project_ids), VisibilityPageView.viewed_at >= month_start,
+        )
+    )).scalar_one()
 
     # Total buyers
     total_buyers = (await db.execute(
@@ -115,6 +133,8 @@ async def get_developer_stats(
         "active_this_week": active_this_week,
         "photos_uploaded": photos_uploaded,
         "buyer_complaints": 0,
+        "new_leads_this_month": new_leads_this_month,
+        "visibility_views_this_month": visibility_views_this_month,
     }, request=request)
 
 

@@ -42,6 +42,12 @@ class Project(Base):
     project_type_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("project_types.id"), nullable=True)
     workflow_template_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_templates.id"), nullable=True)
     current_stage_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("workflow_stages.id"), nullable=True)
+    # ── Subscription (scoped to this project, not the developer — a developer
+    #    can run different projects on different tiers) ─────────────────────
+    subscription_tier: Mapped[str] = mapped_column(String(50), default="trial")
+    subscription_status: Mapped[str] = mapped_column(String(50), default="active")
+    subscription_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from typing import Optional
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.deps import require_admin
@@ -108,8 +110,6 @@ async def list_projects(
         select(
             Project,
             Developer.company_name,
-            Developer.subscription_tier,
-            Developer.subscription_status,
             buyer_count_sq.label("buyer_count"),
         )
         .outerjoin(Developer, Developer.id == Project.developer_id)
@@ -122,11 +122,11 @@ async def list_projects(
     )).scalar_one()
 
     rows = []
-    for proj, company_name, tier, sub_status, buyer_count in result.all():
+    for proj, company_name, buyer_count in result.all():
+        # subscription_tier/status come from the project itself (model_validate
+        # below) — subscriptions are scoped per-project, not per-developer.
         data = ProjectResponse.model_validate(proj).model_dump()
         data["developer_name"] = company_name
-        data["subscription_tier"] = tier
-        data["subscription_status"] = sub_status
         data["buyer_count"] = buyer_count or 0
         rows.append(data)
 
@@ -301,6 +301,9 @@ async def review_upload(
     upload = result.scalar_one_or_none()
     if not upload:
         raise NotFoundError("Upload not found")
+
+    if req.title is not None and req.title.strip():
+        upload.title = req.title.strip()
 
     if req.action == "approve":
         upload.status = "approved"
@@ -599,31 +602,84 @@ async def list_subscriptions(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """Subscriptions are scoped to the project, not the developer — a developer
+    can run different projects on different tiers, so this lists one row per
+    project rather than one row per developer."""
     offset = (page - 1) * limit
-    stmt = select(Developer).where(Developer.deleted_at.is_(None))
-    count_stmt = select(func.count()).select_from(Developer).where(Developer.deleted_at.is_(None))
+    stmt = (
+        select(Project, Developer.company_name)
+        .outerjoin(Developer, Developer.id == Project.developer_id)
+        .where(Project.deleted_at.is_(None))
+    )
+    count_stmt = select(func.count()).select_from(Project).where(Project.deleted_at.is_(None))
     if status:
-        stmt = stmt.where(Developer.subscription_status == status)
-        count_stmt = count_stmt.where(Developer.subscription_status == status)
+        stmt = stmt.where(Project.subscription_status == status)
+        count_stmt = count_stmt.where(Project.subscription_status == status)
     if tier:
-        stmt = stmt.where(Developer.subscription_tier == tier)
-        count_stmt = count_stmt.where(Developer.subscription_tier == tier)
-    stmt = stmt.order_by(Developer.created_at.desc()).offset(offset).limit(limit)
-    devs = (await db.execute(stmt)).scalars().all()
+        stmt = stmt.where(Project.subscription_tier == tier)
+        count_stmt = count_stmt.where(Project.subscription_tier == tier)
+    stmt = stmt.order_by(Project.created_at.desc()).offset(offset).limit(limit)
+    rows = (await db.execute(stmt)).all()
     count = (await db.execute(count_stmt)).scalar_one()
     data = [
         {
-            "developer_id": d.id,
-            "developer_name": d.company_name,
-            "tier": d.subscription_tier,
-            "status": d.subscription_status,
-            "trial_ends_at": d.trial_ends_at.isoformat() if d.trial_ends_at else None,
-            "current_period_end": d.subscription_expires_at.isoformat() if d.subscription_expires_at else None,
+            "project_id": proj.id,
+            "project_name": proj.name,
+            "developer_id": proj.developer_id,
+            "developer_name": company_name,
+            "tier": proj.subscription_tier,
+            "status": proj.subscription_status,
+            "trial_ends_at": proj.trial_ends_at.isoformat() if proj.trial_ends_at else None,
+            "current_period_end": proj.subscription_expires_at.isoformat() if proj.subscription_expires_at else None,
             "storage_used_mb": 0,
         }
-        for d in devs
+        for proj, company_name in rows
     ]
     return paginated(data, count, page, limit, request=request)
+
+
+class AdminProjectSubscriptionUpdate(BaseModel):
+    tier: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.patch("/projects/{project_id}/subscription")
+async def update_project_subscription(
+    project_id: str,
+    req: AdminProjectSubscriptionUpdate,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.shared.audit import log_action
+
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not proj:
+        raise NotFoundError("Project not found")
+
+    before = {"tier": proj.subscription_tier, "status": proj.subscription_status}
+    updates = req.model_dump(exclude_none=True)
+    if "tier" in updates:
+        proj.subscription_tier = updates["tier"]
+    if "status" in updates:
+        proj.subscription_status = updates["status"]
+    await db.commit()
+    await db.refresh(proj)
+
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin",
+        action="project.subscription_updated", entity_type="project", entity_id=proj.id,
+        developer_id=proj.developer_id, before=before, after=updates,
+        request_id=getattr(request.state, "request_id", None),
+    )
+
+    return ok({
+        "project_id": proj.id,
+        "tier": proj.subscription_tier,
+        "status": proj.subscription_status,
+    }, request=request)
 
 
 # ============================================================
@@ -820,8 +876,64 @@ async def get_project_detail(
         "completed_milestones": completed_milestones,
         "construction_progress": proj.construction_progress,
         "created_at": proj.created_at.isoformat() if proj.created_at else None,
+        "site_latitude": proj.site_latitude,
+        "site_longitude": proj.site_longitude,
+        "gps_radius_metres": proj.gps_radius_metres,
+        "subscription_tier": proj.subscription_tier,
+        "subscription_status": proj.subscription_status,
+        "subscription_expires_at": proj.subscription_expires_at.isoformat() if proj.subscription_expires_at else None,
+        "trial_ends_at": proj.trial_ends_at.isoformat() if proj.trial_ends_at else None,
     }
     return ok(data, request=request)
+
+
+class AdminProjectGpsUpdate(BaseModel):
+    site_latitude: Optional[float] = None
+    site_longitude: Optional[float] = None
+    gps_radius_metres: Optional[float] = None
+
+
+@router.patch("/projects/{project_id}/gps")
+async def update_project_gps(
+    project_id: str,
+    req: AdminProjectGpsUpdate,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Correct a project's registered site coordinates / GPS radius — e.g. after
+    a physical on-site test reveals the registered pin or radius is off."""
+    from app.shared.audit import log_action
+
+    proj = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not proj:
+        raise NotFoundError("Project not found")
+
+    before = {
+        "site_latitude": proj.site_latitude,
+        "site_longitude": proj.site_longitude,
+        "gps_radius_metres": proj.gps_radius_metres,
+    }
+    for field, value in req.model_dump(exclude_none=True).items():
+        setattr(proj, field, value)
+    await db.commit()
+    await db.refresh(proj)
+
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin",
+        action="project.gps_updated", entity_type="project", entity_id=proj.id,
+        developer_id=proj.developer_id, before=before,
+        after=req.model_dump(exclude_none=True),
+        request_id=getattr(request.state, "request_id", None),
+    )
+
+    return ok({
+        "site_latitude": proj.site_latitude,
+        "site_longitude": proj.site_longitude,
+        "gps_radius_metres": proj.gps_radius_metres,
+    }, request=request)
 
 
 # ============================================================

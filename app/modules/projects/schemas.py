@@ -55,6 +55,10 @@ class ProjectResponse(BaseModel):
     project_type_id: Optional[str]
     workflow_template_id: Optional[str]
     current_stage_id: Optional[str]
+    subscription_tier: str = "trial"
+    subscription_status: str = "active"
+    subscription_expires_at: Optional[datetime] = None
+    trial_ends_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

@@ -72,6 +72,7 @@ class AdminUploadReview(BaseModel):
     action: str  # approve, reject
     reason: Optional[str] = None
     send_notification: bool = True
+    title: Optional[str] = None
 
 
 class PlatformStatsResponse(BaseModel):

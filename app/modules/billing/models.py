@@ -17,6 +17,7 @@ class SubscriptionPayment(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     developer_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     tier: Mapped[str] = mapped_column(String(50), nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

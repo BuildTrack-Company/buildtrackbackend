@@ -63,8 +63,8 @@ async def create_upload_session(
                 },
             )
 
-    # Check photo quota
-    await assert_can_upload_photos(db, developer_id, req.photo_count)
+    # Check photo quota (scoped to this project's own subscription tier)
+    await assert_can_upload_photos(db, req.project_id, req.photo_count)
 
     # Create session
     session_id = new_id()

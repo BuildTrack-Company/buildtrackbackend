@@ -9,7 +9,7 @@ from app.modules.projects.schemas import ProjectCreate, ProjectUpdate
 from app.core.exceptions import NotFoundError, ForbiddenError
 from app.shared.ids import new_id
 from app.shared.code_gen import generate_project_code
-from app.shared.quotas import assert_can_create_project, assert_within_unit_capacity
+from app.shared.quotas import assert_within_unit_capacity
 
 
 def _slugify(name: str) -> str:
@@ -31,8 +31,9 @@ async def generate_unique_slug(db: AsyncSession, name: str) -> str:
 
 
 async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate) -> Project:
-    await assert_can_create_project(db, developer_id)
-    await assert_within_unit_capacity(db, developer_id, req.total_units)
+    # New projects start on the "trial" tier until their subscription is configured
+    # (subscriptions are scoped to the project, not the developer).
+    await assert_within_unit_capacity(db, "trial", req.total_units)
 
     # Generate unique project code
     for _ in range(10):

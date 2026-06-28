@@ -52,13 +52,15 @@ async def list_projects(
     ms_done = {r.project_id: int(r.done or 0) for r in ms_rows}
 
     latest = (await db.execute(
-        select(Upload.id, Upload.project_id)
+        select(Upload.id, Upload.project_id, Upload.created_at)
         .where(Upload.project_id.in_(pids), Upload.status == "approved")
         .order_by(Upload.project_id, Upload.created_at.desc())
     )).all()
     latest_upload = {}
-    for uid, pid in latest:
+    latest_upload_at = {}
+    for uid, pid, created_at in latest:
         latest_upload.setdefault(pid, uid)
+        latest_upload_at.setdefault(pid, created_at)
     images = {}
     if latest_upload:
         photo_rows = (await db.execute(
@@ -73,6 +75,8 @@ async def list_projects(
             if up_id in photo_by_upload:
                 images[pid] = get_signed_url(photo_by_upload[up_id], "display")
 
+    from app.modules.public.service import compute_activity_status, _days_since
+
     out = []
     for p in projects:
         data = schemas.ProjectResponse.model_validate(p).model_dump()
@@ -83,6 +87,9 @@ async def list_projects(
         data["completed_milestones"] = done
         data["milestone_count"] = total
         data["card_image"] = images.get(p.id)
+        last_at = latest_upload_at.get(p.id)
+        data["activity_status"] = compute_activity_status(p.activity_overdue_threshold_days or 14, last_at)
+        data["days_since_last_update"] = _days_since(last_at)
         out.append(data)
     return ok(out, request=request)
 
