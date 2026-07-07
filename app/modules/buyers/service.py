@@ -314,13 +314,12 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
     result = await db.execute(
         select(Project).where(
             Project.project_code == req.project_code.upper(),
-            Project.is_public.is_(True),
             Project.deleted_at.is_(None),
         )
     )
     project = result.scalar_one_or_none()
     if not project:
-        raise NotFoundError("Project not found or not publicly accessible")
+        raise NotFoundError("Invalid project code")
 
     email = req.email.lower()
 

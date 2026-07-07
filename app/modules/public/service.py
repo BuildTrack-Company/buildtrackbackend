@@ -292,6 +292,8 @@ async def get_visibility_page(db: AsyncSession, slug: str) -> dict:
             "last_milestone": last_milestone.name if last_milestone else None,
             "next_milestone_date": next_milestone.expected_date if next_milestone else None,
             "activity_status": compute_activity_status(project.activity_overdue_threshold_days, last_at),
+            "update_frequency_days": project.activity_overdue_threshold_days or 14,
+            "update_frequency_label": f"Every {project.activity_overdue_threshold_days or 14} days",
         },
         "milestones": [
             {
