@@ -51,7 +51,8 @@ class FinalizeUploadRequest(BaseModel):
     title: str
     category: str
     progress_at_upload: int = Field(ge=0, le=100)
-    caption: str
+    # A written update is mandatory — enforce a non-empty caption at the API level.
+    caption: str = Field(min_length=1)
     capture_latitude: float
     capture_longitude: float
     accuracy_m: float
