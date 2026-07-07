@@ -4,42 +4,42 @@ Run from the backend directory: python scripts/cleanup_projects.py
 """
 import asyncio
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, update
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from app.core.config import settings
-from app.modules.projects.models import Project
 
-KEEP = {
+KEEP = [
     "Express View Residency",
     "Luna Oak Residency",
     "Highpoint 336 Residences",
+    "Highpoint 336 Residence",   # include both spellings
     "Sycamore Residences",
-}
+]
 
 
 async def run():
-    engine = create_async_engine(settings.database_url)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    from app.core.database import engine
+    from sqlalchemy.ext.asyncio import AsyncConnection
+    from sqlalchemy import text
 
-    async with async_session() as db:
-        result = await db.execute(select(Project).where(Project.deleted_at.is_(None)))
-        all_projects = result.scalars().all()
+    async with engine.connect() as conn:
+        # List all active projects
+        result = await conn.execute(text(
+            "SELECT id, name FROM projects WHERE deleted_at IS NULL ORDER BY name"
+        ))
+        all_projects = result.fetchall()
 
-        keep = [p for p in all_projects if p.name.strip() in KEEP]
-        remove = [p for p in all_projects if p.name.strip() not in KEEP]
+        keep = [(row.id, row.name) for row in all_projects if row.name.strip() in KEEP]
+        remove = [(row.id, row.name) for row in all_projects if row.name.strip() not in KEEP]
 
         print(f"\nKeeping {len(keep)} projects:")
-        for p in keep:
-            print(f"  ✓ {p.name} (id={p.id})")
+        for pid, name in keep:
+            print(f"  ✓ {name}")
 
         print(f"\nSoft-deleting {len(remove)} projects:")
-        for p in remove:
-            print(f"  ✗ {p.name} (id={p.id})")
+        for pid, name in remove:
+            print(f"  ✗ {name}")
 
         if not remove:
             print("\nNothing to delete.")
@@ -50,14 +50,14 @@ async def run():
             print("Aborted.")
             return
 
+        ids_to_remove = [pid for pid, _ in remove]
         now = datetime.now(timezone.utc)
-        for p in remove:
-            p.deleted_at = now
-
-        await db.commit()
+        await conn.execute(
+            text("UPDATE projects SET deleted_at = :ts WHERE id = ANY(:ids)"),
+            {"ts": now, "ids": ids_to_remove}
+        )
+        await conn.commit()
         print(f"\nDone. {len(remove)} projects soft-deleted.")
-
-    await engine.dispose()
 
 
 if __name__ == "__main__":
