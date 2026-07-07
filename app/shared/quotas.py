@@ -9,7 +9,8 @@ logger = structlog.get_logger(__name__)
 # monthly_fee_kes is informational; max_projects None = unlimited.
 TIER_LIMITS = {
     "trial": {
-        "max_units": 80,
+        # Trial projects can have any number of units (None = unlimited).
+        "max_units": None,
         "monthly_fee_kes": 0,
         "max_projects": 1,
         "max_photos_per_upload": 10,
