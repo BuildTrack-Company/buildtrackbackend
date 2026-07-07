@@ -185,7 +185,7 @@ async def finalize_upload(
         within_boundary=within_boundary,
         gps_validated=True,
         photo_count=len(req.photos),
-        status="pending_review",
+        status="pending",
         flag_reason=None,
     )
     db.add(upload)

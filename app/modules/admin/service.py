@@ -15,15 +15,42 @@ from app.shared.ids import new_id
 from app.core.security import hash_password
 
 
-async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20):
+async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20, search: str = None):
     offset = (page - 1) * limit
-    result = await db.execute(
-        select(Developer).where(Developer.deleted_at.is_(None)).offset(offset).limit(limit)
+    conditions = [Developer.deleted_at.is_(None)]
+    if search:
+        conditions.append(Developer.company_name.ilike(f"%{search}%"))
+
+    # Join User for email/phone + project count subquery
+    proj_count_sq = (
+        select(Project.developer_id, func.count(Project.id).label("project_count"))
+        .where(Project.deleted_at.is_(None))
+        .group_by(Project.developer_id)
+        .subquery()
     )
-    developers = result.scalars().all()
-    count = await db.execute(select(func.count()).select_from(Developer).where(Developer.deleted_at.is_(None)))
-    total = count.scalar_one()
-    return developers, total
+    stmt = (
+        select(Developer, User.email, User.phone, func.coalesce(proj_count_sq.c.project_count, 0))
+        .outerjoin(User, User.id == Developer.user_id)
+        .outerjoin(proj_count_sq, proj_count_sq.c.developer_id == Developer.id)
+        .where(*conditions)
+        .order_by(Developer.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    results = []
+    for dev, email, phone, project_count in rows:
+        d = dev
+        d.__dict__["email"] = email
+        d.__dict__["phone"] = phone
+        d.__dict__["project_count"] = project_count or 0
+        results.append(d)
+
+    count = (await db.execute(
+        select(func.count()).select_from(Developer).where(*conditions)
+    )).scalar_one()
+    return results, count
 
 
 async def create_developer_admin(db: AsyncSession, req) -> Developer:
@@ -38,7 +65,8 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
         email=req.email.lower(),
         hashed_password=hash_password(req.password),
         role="developer",
-        full_name=req.full_name,
+        full_name=req.contact_person_name,
+        phone=getattr(req, "contact_phone", None),
         is_active=True,
         email_verified=True,
     )
@@ -49,8 +77,12 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
         id=new_id(),
         user_id=user.id,
         company_name=req.company_name,
+        contact_name=req.contact_person_name,
         subscription_tier=req.subscription_tier,
         subscription_status="active",
+        years_operating=getattr(req, "years_operating", 0),
+        projects_completed=getattr(req, "projects_completed", 0),
+        company_overview=getattr(req, "company_description", None),
     )
     db.add(developer)
     await db.commit()
@@ -66,7 +98,7 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
             subject="Welcome to BuildTrack - Developer Account",
             template_name="developer_credentials.html.j2",
             template_context={
-                "full_name": req.full_name,
+                "full_name": req.contact_person_name,
                 "company_name": req.company_name,
                 "email": req.email.lower(),
                 "temporary_password": req.password,

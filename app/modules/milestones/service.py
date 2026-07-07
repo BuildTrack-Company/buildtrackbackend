@@ -54,7 +54,20 @@ async def update_milestone(
     db: AsyncSession, milestone_id: str, project_id: str, developer_id: str, req
 ) -> Milestone:
     milestone = await get_milestone(db, milestone_id, project_id, developer_id)
-    for field, value in req.model_dump(exclude_none=True).items():
+    data = req.model_dump(exclude_none=True)
+
+    if "expected_date" in data:
+        now = datetime.now(timezone.utc)
+        if milestone.expected_date_set_at is not None:
+            lock_age = (now - milestone.expected_date_set_at).total_seconds()
+            if lock_age > 48 * 3600:
+                raise ForbiddenError(
+                    "Milestone target date is locked after 48 hours. Use Log Delay to reschedule."
+                )
+        else:
+            milestone.expected_date_set_at = now
+
+    for field, value in data.items():
         setattr(milestone, field, value)
     milestone.updated_at = datetime.now(timezone.utc)
     await db.commit()

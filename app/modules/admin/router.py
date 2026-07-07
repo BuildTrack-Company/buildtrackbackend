@@ -33,10 +33,11 @@ async def list_developers(
     request: Request,
     page: int = 1,
     limit: int = 20,
+    search: Optional[str] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    developers, total = await service.list_developers(db, page, limit)
+    developers, total = await service.list_developers(db, page, limit, search=search)
     return paginated(
         [DeveloperResponse.model_validate(d).model_dump() for d in developers],
         total, page, limit, request=request,

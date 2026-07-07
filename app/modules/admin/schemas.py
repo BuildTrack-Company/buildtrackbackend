@@ -25,8 +25,12 @@ class AuditLogResponse(BaseModel):
 class CreateDeveloperAdminRequest(BaseModel):
     email: EmailStr
     password: str
-    full_name: str
+    contact_person_name: str
     company_name: str
+    contact_phone: Optional[str] = None
+    years_operating: int = 0
+    projects_completed: int = 0
+    company_description: Optional[str] = None
     subscription_tier: str = "trial"
 
 

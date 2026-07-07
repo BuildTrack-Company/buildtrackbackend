@@ -51,7 +51,7 @@ class FinalizeUploadRequest(BaseModel):
     title: str
     category: str
     progress_at_upload: int = Field(ge=0, le=100)
-    caption: Optional[str] = None
+    caption: str
     capture_latitude: float
     capture_longitude: float
     accuracy_m: float
