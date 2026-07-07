@@ -82,6 +82,9 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
         subscription_status="active",
         years_operating=getattr(req, "years_operating", 0),
         projects_completed=getattr(req, "projects_completed", 0),
+        active_developments=getattr(req, "active_developments", 0),
+        avg_update_frequency_days=getattr(req, "avg_update_frequency_days", None),
+        update_consistency_pct=getattr(req, "update_consistency_pct", None),
         company_overview=getattr(req, "company_description", None),
     )
     db.add(developer)
@@ -135,9 +138,11 @@ async def update_developer_admin(db: AsyncSession, developer_id: str, updates: d
     if not dev:
         raise NotFoundError("Developer not found")
 
+    field_map = {"company_description": "company_overview"}
     for field, value in updates.items():
-        if hasattr(dev, field):
-            setattr(dev, field, value)
+        mapped = field_map.get(field, field)
+        if hasattr(dev, mapped):
+            setattr(dev, mapped, value)
 
     dev.updated_at = datetime.now(timezone.utc)
     await db.commit()

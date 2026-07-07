@@ -30,6 +30,9 @@ class CreateDeveloperAdminRequest(BaseModel):
     contact_phone: Optional[str] = None
     years_operating: int = 0
     projects_completed: int = 0
+    active_developments: int = 0
+    avg_update_frequency_days: Optional[float] = None
+    update_consistency_pct: Optional[float] = None
     company_description: Optional[str] = None
     subscription_tier: str = "trial"
 
