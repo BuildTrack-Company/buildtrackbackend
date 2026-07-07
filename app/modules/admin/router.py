@@ -267,7 +267,7 @@ async def list_pending_uploads(
     """All uploads awaiting admin review."""
     offset = (page - 1) * limit
     rows_result, count = await _query_uploads(
-        db, offset, limit, where=(Upload.status == "pending"),
+        db, offset, limit, where=Upload.status.in_(["pending", "pending_review"]),
         project_id=project_id, developer_id=developer_id,
     )
     return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
