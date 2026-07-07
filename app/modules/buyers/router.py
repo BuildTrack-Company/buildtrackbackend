@@ -375,28 +375,68 @@ async def import_buyers_csv(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    """Bulk-invite buyers from an uploaded CSV (columns: name, email, phone / unit optional)."""
+    """Bulk-invite buyers from an uploaded CSV.
+
+    Accepts the documented column order (Full Name, Email, Phone, Unit Number)
+    whether or not a header row is present, and tolerates natural header spellings
+    like "Email Address". Only email is required per row.
+    """
     import csv as _csv
     import io
+    import re
 
     raw = (await file.read()).decode("utf-8-sig", errors="ignore")
-    reader = _csv.DictReader(io.StringIO(raw))
-    items: list[schemas.BuyerInviteRequest] = []
-    parse_errors: list[str] = []
+    email_re = re.compile(r"[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+")
 
     def _norm(s: str) -> str:
         # Normalise a header so "Full Name", "full_name" and "full-name" all match.
         return "".join(ch for ch in (s or "").strip().lower() if ch.isalnum())
 
+    known_headers = {
+        "email", "emailaddress", "name", "fullname", "buyername",
+        "phone", "phonenumber", "mobile", "mobilenumber", "tel",
+        "unit", "unitnumber", "unitno", "housenumber",
+    }
+
+    all_rows = [r for r in _csv.reader(io.StringIO(raw)) if any((c or "").strip() for c in r)]
+    if not all_rows:
+        from app.core.exceptions import ValidationError
+        raise ValidationError("The CSV file appears to be empty")
+
+    first = all_rows[0]
+    # A first row is a header only if it names a known column and holds no email value.
+    has_header = (
+        any(_norm(c) in known_headers for c in first)
+        and not any(email_re.search(c or "") for c in first)
+    )
+    if has_header:
+        headers = [c for c in first]
+        body_rows = all_rows[1:]
+        start_line = 2
+    else:
+        # Headerless file: map by position per the documented order.
+        headers = ["full_name", "email", "phone", "unit_number"]
+        body_rows = all_rows
+        start_line = 1
+
+    items: list[schemas.BuyerInviteRequest] = []
+    parse_errors: list[str] = []
+
     def pick(row: dict, *keys: str) -> str | None:
         wanted = {_norm(k) for k in keys}
         for rk, rv in row.items():
             if rk and _norm(rk) in wanted:
-                return (rv or "").strip() or None
+                v = (rv or "").strip()
+                if v:
+                    return v
         return None
 
-    for i, row in enumerate(reader, start=2):
+    for i, cols in enumerate(body_rows, start=start_line):
+        row = dict(zip(headers, cols))
         email = pick(row, "email", "e-mail", "email address", "emailaddress")
+        if not email:
+            # Rescue: accept any cell that clearly holds an email address.
+            email = next((c.strip() for c in cols if c and email_re.search(c)), None)
         if not email:
             continue
         try:
@@ -411,7 +451,9 @@ async def import_buyers_csv(
 
     if not items:
         from app.core.exceptions import ValidationError
-        raise ValidationError("No valid buyer rows found in CSV (expected an 'email' column)")
+        raise ValidationError(
+            "No valid buyer rows found. Use columns: Full Name, Email, Phone, Unit Number."
+        )
 
     buyers, errors = await service.bulk_invite_buyers(
         db, project_id, ctx.developer_id, schemas.BulkInviteRequest(buyers=items)
