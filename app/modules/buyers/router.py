@@ -384,23 +384,27 @@ async def import_buyers_csv(
     items: list[schemas.BuyerInviteRequest] = []
     parse_errors: list[str] = []
 
+    def _norm(s: str) -> str:
+        # Normalise a header so "Full Name", "full_name" and "full-name" all match.
+        return "".join(ch for ch in (s or "").strip().lower() if ch.isalnum())
+
     def pick(row: dict, *keys: str) -> str | None:
-        for k in keys:
-            for rk, rv in row.items():
-                if rk and rk.strip().lower() == k:
-                    return (rv or "").strip() or None
+        wanted = {_norm(k) for k in keys}
+        for rk, rv in row.items():
+            if rk and _norm(rk) in wanted:
+                return (rv or "").strip() or None
         return None
 
     for i, row in enumerate(reader, start=2):
-        email = pick(row, "email", "e-mail")
+        email = pick(row, "email", "e-mail", "email address", "emailaddress")
         if not email:
             continue
         try:
             items.append(schemas.BuyerInviteRequest(
                 email=email,
-                full_name=pick(row, "name", "full_name", "fullname"),
-                phone=pick(row, "phone", "phone_number", "mobile"),
-                unit_number=pick(row, "unit", "unit_number", "unit_no"),
+                full_name=pick(row, "name", "full_name", "fullname", "full name", "buyer name"),
+                phone=pick(row, "phone", "phone_number", "phone number", "mobile", "mobile number", "tel"),
+                unit_number=pick(row, "unit", "unit_number", "unit number", "unit_no", "house number"),
             ))
         except Exception as e:  # noqa: BLE001
             parse_errors.append(f"Row {i}: {e}")

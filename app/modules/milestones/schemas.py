@@ -33,6 +33,7 @@ class MilestoneResponse(BaseModel):
 class MilestoneUpdate(BaseModel):
     expected_date: Optional[datetime] = None
     description: Optional[str] = None
+    status: Optional[str] = None
 
 
 class MilestoneCompleteRequest(BaseModel):

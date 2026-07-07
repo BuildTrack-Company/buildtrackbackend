@@ -56,6 +56,12 @@ async def update_milestone(
     milestone = await get_milestone(db, milestone_id, project_id, developer_id)
     data = req.model_dump(exclude_none=True)
 
+    # Only accept known status values; "complete"/"delayed" have their own
+    # endpoints (which run extra side-effects), so reject them here.
+    if "status" in data and data["status"] not in ("pending", "in_progress"):
+        from app.core.exceptions import ValidationError
+        raise ValidationError("Invalid milestone status")
+
     if "expected_date" in data:
         now = datetime.now(timezone.utc)
         if milestone.expected_date_set_at is not None:

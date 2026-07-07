@@ -154,6 +154,13 @@ async def create_project_admin(
     )
     project = await create_project(db, req.developer_id, project_create)
 
+    # Apply the project-level subscription tier chosen by the admin (subscriptions
+    # are scoped to the project, not the developer).
+    if req.subscription_tier:
+        project.subscription_tier = req.subscription_tier
+        await db.commit()
+        await db.refresh(project)
+
     await log_action(
         db,
         actor_user_id=current_user.id,

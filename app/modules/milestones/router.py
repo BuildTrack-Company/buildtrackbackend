@@ -73,6 +73,14 @@ async def delay_milestone(
         db, milestone_id, project_id, ctx.developer_id, req.reason, req.new_expected_date
     )
 
+    # Notify all enrolled buyers of the revised schedule (the developer UI promises
+    # "logging a delay will immediately notify all enrolled buyers").
+    try:
+        from app.modules.notifications.service import send_milestone_notification
+        await send_milestone_notification(milestone_id, "delayed", db)
+    except Exception:  # best-effort — never fail the delay because email failed
+        pass
+
     await log_action(
         db,
         actor_user_id=ctx.user_id,

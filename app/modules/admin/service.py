@@ -106,26 +106,28 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
     await db.commit()
     await db.refresh(developer)
 
-    # Send credentials email in the background (if admin enabled welcome emails)
+    # Send the welcome + credentials email. Awaited directly (not a fire-and-forget
+    # background task) so it reliably sends on serverless hosts — an un-referenced
+    # asyncio task can be garbage-collected or cancelled once the request returns.
     from app.modules.settings.service import is_notification_enabled
     welcome_enabled = await is_notification_enabled(db, "notify_developer_welcome")
-    try:
-        if welcome_enabled:
-            asyncio.create_task(send_email(
-            to=req.email.lower(),
-            subject="Welcome to BuildTrack - Developer Account",
-            template_name="developer_credentials.html.j2",
-            template_context={
-                "full_name": req.contact_person_name,
-                "company_name": req.company_name,
-                "email": req.email.lower(),
-                "temporary_password": req.password,
-                "login_url": "https://buildtrack.co.ke/login/developer"
-            }
-        ))
-    except Exception as e:
-        import logging
-        logging.error(f"Failed to send developer credential email: {e}")
+    if welcome_enabled:
+        try:
+            await send_email(
+                to=req.email.lower(),
+                subject="Welcome to BuildTrack - Developer Account",
+                template_name="developer_credentials.html.j2",
+                template_context={
+                    "full_name": req.contact_person_name,
+                    "company_name": req.company_name,
+                    "email": req.email.lower(),
+                    "temporary_password": req.password,
+                    "login_url": "https://buildtrack.co.ke/login/developer"
+                }
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to send developer credential email: {e}")
 
     return developer
 
