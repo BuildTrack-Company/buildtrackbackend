@@ -85,6 +85,21 @@ async def create_developer_admin(db: AsyncSession, req) -> Developer:
         company_overview=getattr(req, "company_description", None),
     )
     db.add(developer)
+    await db.flush()
+
+    # Assign developer_owner role automatically
+    from app.modules.roles.models import Role, UserRoleAssignment
+    from datetime import datetime, timezone as _tz
+    owner_role = (await db.execute(select(Role).where(Role.name == "developer_owner"))).scalar_one_or_none()
+    if owner_role:
+        db.add(UserRoleAssignment(
+            id=new_id(),
+            user_id=user.id,
+            role_id=owner_role.id,
+            developer_id=developer.id,
+            granted_at=datetime.now(_tz.utc),
+        ))
+
     await db.commit()
     await db.refresh(developer)
 

@@ -21,7 +21,7 @@ async def list_buyers(
     return ok([schemas.BuyerResponse.model_validate(b).model_dump() for b in buyers], request=request)
 
 
-@router.post("/projects/{project_id}/buyers/invite", status_code=201, dependencies=[require_permission("buyers", "create")])
+@router.post("/projects/{project_id}/buyers/invite", status_code=201, dependencies=[require_permission("buyers", "invite")])
 async def invite_buyer(
     project_id: str,
     req: schemas.BuyerInviteRequest,
@@ -33,7 +33,7 @@ async def invite_buyer(
     return ok(schemas.BuyerResponse.model_validate(buyer).model_dump(), request=request)
 
 
-@router.post("/projects/{project_id}/buyers/bulk-invite", status_code=201, dependencies=[require_permission("buyers", "create")])
+@router.post("/projects/{project_id}/buyers/bulk-invite", status_code=201, dependencies=[require_permission("buyers", "invite")])
 async def bulk_invite_buyers(
     project_id: str,
     req: schemas.BulkInviteRequest,
@@ -51,7 +51,7 @@ async def bulk_invite_buyers(
     )
 
 
-@router.post("/projects/{project_id}/buyers/{buyer_id}/resend", dependencies=[require_permission("buyers", "create")])
+@router.post("/projects/{project_id}/buyers/{buyer_id}/resend", dependencies=[require_permission("buyers", "invite")])
 async def resend_invitation(
     project_id: str,
     buyer_id: str,
@@ -367,7 +367,7 @@ async def update_notification_preferences(
     }, request=request)
 
 
-@router.post("/projects/{project_id}/buyers/csv", status_code=201, dependencies=[require_permission("buyers", "create")])
+@router.post("/projects/{project_id}/buyers/csv", status_code=201, dependencies=[require_permission("buyers", "invite")])
 async def import_buyers_csv(
     project_id: str,
     request: Request,
