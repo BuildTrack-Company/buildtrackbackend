@@ -51,6 +51,42 @@ async def bulk_invite_buyers(
     )
 
 
+# ─── Project units (for buyer self-registration validation) ──────────────────
+
+@router.get("/projects/{project_id}/units", dependencies=[require_permission("buyers", "read")])
+async def list_units(
+    project_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    units = await service.list_project_units(db, project_id, ctx.developer_id)
+    return ok(units, request=request)
+
+
+@router.post("/projects/{project_id}/units", status_code=201, dependencies=[require_permission("buyers", "invite")])
+async def add_unit(
+    project_id: str,
+    req: schemas.AddUnitRequest,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    unit = await service.add_project_unit(db, project_id, ctx.developer_id, req.unit_number)
+    return ok(unit, request=request)
+
+
+@router.delete("/projects/{project_id}/units/{unit_id}", status_code=204, dependencies=[require_permission("buyers", "invite")])
+async def delete_unit(
+    project_id: str,
+    unit_id: str,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await service.delete_project_unit(db, unit_id, project_id, ctx.developer_id)
+
+
 @router.post("/projects/{project_id}/buyers/{buyer_id}/resend", dependencies=[require_permission("buyers", "invite")])
 async def resend_invitation(
     project_id: str,

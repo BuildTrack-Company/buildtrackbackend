@@ -14,6 +14,10 @@ class BulkInviteRequest(BaseModel):
     buyers: List[BuyerInviteRequest]
 
 
+class AddUnitRequest(BaseModel):
+    unit_number: str
+
+
 class BuyerUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     unit_number: Optional[str] = None

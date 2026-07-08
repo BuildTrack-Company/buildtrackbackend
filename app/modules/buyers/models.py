@@ -26,3 +26,18 @@ class Buyer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProjectUnit(Base):
+    """A unit number the developer has assigned to a project. Buyer self-registration
+    is validated against these (plus any units already present on buyer records).
+    Added in bulk via the buyer CSV, or one at a time via "Add Unit"."""
+    __tablename__ = "project_units"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    unit_number: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Lower-cased, alphanumeric-only form used for matching ("A-204" -> "a204").
+    unit_number_normalized: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

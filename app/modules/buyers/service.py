@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import structlog
 
-from app.modules.buyers.models import Buyer
+from app.modules.buyers.models import Buyer, ProjectUnit
 from app.modules.buyers.schemas import BuyerInviteRequest, BulkInviteRequest
 from app.modules.projects.models import Project
 from app.core.exceptions import NotFoundError, DuplicateError, ForbiddenError, ValidationError
@@ -15,6 +15,119 @@ from app.shared.email import send_email
 from app.shared.quotas import assert_can_invite_buyer
 
 logger = structlog.get_logger(__name__)
+
+
+def normalize_unit(value: str) -> str:
+    """Normalise a unit number for matching: lower-case, alphanumerics only.
+    So "A-204", "a 204" and "A204" all compare equal, while "A-204" and "204"
+    stay distinct (they are genuinely different units)."""
+    return "".join(ch for ch in (value or "").lower() if ch.isalnum())
+
+
+async def _verify_project_owner(db: AsyncSession, project_id: str, developer_id: str) -> Project:
+    project = (await db.execute(
+        select(Project).where(
+            Project.id == project_id,
+            Project.developer_id == developer_id,
+            Project.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if not project:
+        raise NotFoundError("Project not found")
+    return project
+
+
+async def record_project_unit(db: AsyncSession, project_id: str, unit_number: str) -> None:
+    """Idempotently record a project unit (dedup on the normalised form).
+    Commit is left to the caller."""
+    norm = normalize_unit(unit_number)
+    if not norm:
+        return
+    existing = (await db.execute(
+        select(ProjectUnit).where(
+            ProjectUnit.project_id == project_id,
+            ProjectUnit.unit_number_normalized == norm,
+            ProjectUnit.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if existing:
+        return
+    db.add(ProjectUnit(
+        id=new_id(),
+        project_id=project_id,
+        unit_number=unit_number.strip(),
+        unit_number_normalized=norm,
+    ))
+
+
+async def add_project_unit(db: AsyncSession, project_id: str, developer_id: str, unit_number: str) -> dict:
+    """Developer adds a single assigned unit (separate from the bulk CSV)."""
+    await _verify_project_owner(db, project_id, developer_id)
+    if not normalize_unit(unit_number):
+        raise ValidationError("Enter a valid unit number")
+    await record_project_unit(db, project_id, unit_number)
+    await db.commit()
+    return {"unit_number": unit_number.strip()}
+
+
+async def list_project_units(db: AsyncSession, project_id: str, developer_id: str) -> List[dict]:
+    """All assigned units for a project — the explicit project_units plus any unit
+    numbers already present on buyer records — de-duplicated on the normalised form."""
+    await _verify_project_owner(db, project_id, developer_id)
+    seen: dict[str, dict] = {}
+
+    rows = (await db.execute(
+        select(ProjectUnit).where(
+            ProjectUnit.project_id == project_id,
+            ProjectUnit.deleted_at.is_(None),
+        ).order_by(ProjectUnit.created_at)
+    )).scalars().all()
+    for u in rows:
+        seen.setdefault(u.unit_number_normalized, {"id": u.id, "unit_number": u.unit_number, "source": "assigned"})
+
+    buyers = (await db.execute(
+        select(Buyer).where(
+            Buyer.project_id == project_id,
+            Buyer.deleted_at.is_(None),
+        )
+    )).scalars().all()
+    for b in buyers:
+        norm = normalize_unit(b.unit_number or "")
+        if norm and norm not in seen:
+            seen[norm] = {"id": None, "unit_number": b.unit_number, "source": "buyer"}
+
+    return list(seen.values())
+
+
+async def delete_project_unit(db: AsyncSession, unit_id: str, project_id: str, developer_id: str) -> None:
+    await _verify_project_owner(db, project_id, developer_id)
+    unit = (await db.execute(
+        select(ProjectUnit).where(ProjectUnit.id == unit_id, ProjectUnit.project_id == project_id)
+    )).scalar_one_or_none()
+    if not unit:
+        raise NotFoundError("Unit not found")
+    unit.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+async def _assigned_normalized_units(db: AsyncSession, project_id: str) -> set[str]:
+    """Set of valid normalised unit numbers for a project (project_units ∪ buyers)."""
+    units = set()
+    rows = (await db.execute(
+        select(ProjectUnit.unit_number_normalized).where(
+            ProjectUnit.project_id == project_id,
+            ProjectUnit.deleted_at.is_(None),
+        )
+    )).scalars().all()
+    units.update(u for u in rows if u)
+    buyer_units = (await db.execute(
+        select(Buyer.unit_number).where(
+            Buyer.project_id == project_id,
+            Buyer.deleted_at.is_(None),
+        )
+    )).scalars().all()
+    units.update(normalize_unit(u) for u in buyer_units if normalize_unit(u or ""))
+    return units
 
 
 async def invite_buyer(
@@ -92,6 +205,10 @@ async def invite_buyer(
     )
     db.add(buyer)
     await db.flush()
+    # Register the buyer's unit as an assigned project unit so it validates
+    # future self-registrations (e.g. co-owners on the same unit).
+    if req.unit_number:
+        await record_project_unit(db, project_id, req.unit_number)
     await db.commit()
 
     # Get developer company name
@@ -335,6 +452,19 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
     project = result.scalar_one_or_none()
     if not project:
         raise NotFoundError("Invalid project code")
+
+    # Validate the buyer's unit number against the units the developer assigned
+    # (bulk CSV + "Add Unit"), matched on the normalised form. Co-owners are
+    # allowed and the unit stays open, so we only check that the unit exists.
+    unit_input = normalize_unit(getattr(req, "unit_number", "") or "")
+    if not unit_input:
+        raise ValidationError("Your unit number is required to register")
+    valid_units = await _assigned_normalized_units(db, project.id)
+    if unit_input not in valid_units:
+        raise ValidationError(
+            "That unit number isn't recognised for this project. "
+            "Please check with your developer that your unit has been added."
+        )
 
     email = req.email.lower()
 
