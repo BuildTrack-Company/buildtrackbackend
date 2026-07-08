@@ -173,7 +173,13 @@ async def get_platform_stats(db: AsyncSession) -> dict:
           (SELECT count(*) FROM buyers     WHERE deleted_at IS NULL) AS total_buyers,
           (SELECT count(*) FROM uploads)                             AS total_uploads,
           (SELECT count(*) FROM uploads WHERE status = 'flagged')    AS flagged_uploads,
-          (SELECT count(*) FROM uploads WHERE status = 'pending')    AS pending_uploads
+          (SELECT count(*) FROM uploads WHERE status = 'pending')    AS pending_uploads,
+          (SELECT COALESCE(SUM(CASE subscription_tier
+                    WHEN 'small' THEN 20000 WHEN 'medium' THEN 32000
+                    WHEN 'large' THEN 52000 WHEN 'enterprise' THEN 75000
+                    ELSE 0 END), 0)
+             FROM projects
+             WHERE deleted_at IS NULL AND subscription_status = 'active') AS monthly_revenue
     """))).mappings().one()
     return {
         "total_developers": row["total_developers"],
@@ -182,6 +188,7 @@ async def get_platform_stats(db: AsyncSession) -> dict:
         "total_uploads": row["total_uploads"],
         "flagged_uploads": row["flagged_uploads"],
         "pending_uploads": row["pending_uploads"],
+        "monthly_revenue": int(row["monthly_revenue"] or 0),
     }
 
 

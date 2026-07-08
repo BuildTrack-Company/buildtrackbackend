@@ -128,6 +128,9 @@ async def get_project(
     project = await service.get_project(db, project_id, ctx.developer_id)
 
     from app.modules.milestones.models import Milestone
+    from app.modules.buyers.models import Buyer
+    from app.modules.uploads.models import Upload, Photo
+    from sqlalchemy import func
     result = await db.execute(
         select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.order_index)
     )
@@ -136,6 +139,21 @@ async def get_project(
     project_data = schemas.ProjectResponse.model_validate(project).model_dump()
     from app.modules.milestones.schemas import MilestoneResponse
     project_data["milestones"] = [MilestoneResponse.model_validate(m).model_dump() for m in milestones]
+
+    # Header/stat cards: Units, Buyers, Photos.
+    buyer_count = (await db.execute(
+        select(func.count()).select_from(Buyer).where(
+            Buyer.project_id == project_id, Buyer.deleted_at.is_(None)
+        )
+    )).scalar_one()
+    photo_count = (await db.execute(
+        select(func.count()).select_from(Photo)
+        .join(Upload, Upload.id == Photo.upload_id)
+        .where(Upload.project_id == project_id)
+    )).scalar_one()
+    project_data["unit_count"] = project.total_units or 0
+    project_data["buyer_count"] = buyer_count
+    project_data["photo_count"] = photo_count
 
     return ok(project_data, request=request)
 

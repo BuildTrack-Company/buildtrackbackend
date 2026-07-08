@@ -200,10 +200,22 @@ async def list_buyers(
     )
     buyers = result.scalars().all()
     count = (await db.execute(select(func.count()).select_from(Buyer).where(*conditions))).scalar_one()
-    return paginated(
-        [BuyerResponse.model_validate(b).model_dump() for b in buyers],
-        count, page, limit, request=request,
-    )
+
+    # Attach the project name so the admin buyers table can fill its Project column.
+    proj_ids = list({b.project_id for b in buyers})
+    proj_names = {}
+    if proj_ids:
+        proj_names = {
+            pid: name for pid, name in (await db.execute(
+                select(Project.id, Project.name).where(Project.id.in_(proj_ids))
+            )).all()
+        }
+    items = []
+    for b in buyers:
+        data = BuyerResponse.model_validate(b).model_dump()
+        data["project_name"] = proj_names.get(b.project_id)
+        items.append(data)
+    return paginated(items, count, page, limit, request=request)
 
 
 @router.get("/uploads")
@@ -254,6 +266,9 @@ def _enrich_uploads(rows):
         data["project_code"] = project_code
         data["developer_name"] = company_name
         data["gps_distance_meters"] = u.distance_from_site_m
+        # Aliases the admin UI reads for the GPS Coordinates column / review modal.
+        data["gps_lat"] = u.capture_latitude
+        data["gps_lng"] = u.capture_longitude
         data["fanout_status"] = u.notification_fanout_status
         data["is_flagged"] = u.status == "flagged"
         data["caption"] = u.caption

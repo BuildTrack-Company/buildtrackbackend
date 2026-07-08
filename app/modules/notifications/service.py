@@ -24,6 +24,13 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
         logger.warning("fanout_upload_not_found", upload_id=upload_id)
         return
 
+    # Idempotency guard: never send a second round of buyer emails for the same
+    # upload (a re-approval or retried request must not re-notify — each buyer
+    # gets exactly one email per update).
+    if upload.notification_fanout_status == "complete":
+        logger.info("fanout_already_complete", upload_id=upload_id)
+        return
+
     result = await db.execute(
         select(Project).where(Project.id == upload.project_id)
     )
@@ -98,7 +105,9 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                         "update_description": upload.caption or "New photos have been uploaded to track construction progress.",
                         "photo_count": upload.photo_count or 0,
                         "gps_coordinates": gps_coords,
-                        "project_page_url": f"https://buildtrack.co.ke/project/{project.project_code}",
+                        # Link to the buyer portal login so they can sign in and
+                        # view the update with their credentials.
+                        "project_page_url": "https://buildtrack.co.ke/login/buyer",
                     },
                 )
 
