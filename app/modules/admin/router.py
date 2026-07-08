@@ -381,7 +381,28 @@ async def review_upload(
     elif req.action == "reject":
         upload.status = "rejected"
         upload.flag_reason = req.reason
-        
+
+        # In-app bell notification so the developer sees the rejection in the
+        # portal (approvals already create one — rejections did not).
+        try:
+            from app.modules.notifications.inapp import create_notification
+            from app.modules.developers.models import Developer as _Dev
+            rej_project = (await db.execute(select(Project).where(Project.id == upload.project_id))).scalar_one_or_none()
+            rej_dev = (await db.execute(select(_Dev).where(_Dev.id == upload.developer_id))).scalar_one_or_none()
+            if rej_dev and rej_dev.user_id:
+                await create_notification(
+                    db, rej_dev.user_id,
+                    title=f"Update needs revision — {rej_project.name if rej_project else 'your project'}",
+                    body=(f"'{upload.title or 'Your update'}' was rejected."
+                          + (f" Reason: {req.reason}" if req.reason else "")
+                          + " Open your Construction Log to submit a corrected update."),
+                    type="error",
+                    link=f"/projects/{upload.project_id}",
+                    commit=False,
+                )
+        except Exception:  # best effort — never block the review
+            pass
+
         # Notify developer of rejection in background (if admin enabled it)
         from app.modules.settings.service import is_notification_enabled
         if await is_notification_enabled(db, "notify_developer_on_rejection"):
