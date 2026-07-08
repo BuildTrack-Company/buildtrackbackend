@@ -592,6 +592,10 @@ async def _notify_developer_rejection(upload_id: str, reason: str):
             project_name = project.name if project else "Unknown Project"
             company_name = dev.company_name if dev else "Developer"
 
+            upload_link = (
+                f"https://buildtrack.co.ke/projects/{project.id}/upload" if project
+                else "https://buildtrack.co.ke/login/developer"
+            )
             await send_email(
                 to=user.email,
                 subject=f"Upload Revision Required: {project_name}",
@@ -600,6 +604,8 @@ async def _notify_developer_rejection(upload_id: str, reason: str):
                     "company_name": company_name,
                     "project_name": project_name,
                     "reason": reason,
+                    "upload_link": upload_link,
+                    "login_url": "https://buildtrack.co.ke/login/developer",
                 }
             )
     except Exception as e:

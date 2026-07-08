@@ -78,6 +78,23 @@ def get_signed_url(public_id: str, transformation: str = "display") -> str:
         return f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/image/upload/{public_id}"
 
 
+def get_document_download_url(public_id: str, fmt: str = "pdf") -> str:
+    """Authenticated download URL for a stored document.
+
+    Cloudinary blocks plain delivery of PDF/ZIP files by default (even signed
+    delivery URLs return 401). The private-download endpoint is authenticated
+    with the API secret and is honoured regardless of that restriction, so this
+    works for both buyers and developers viewing/downloading documents.
+    """
+    try:
+        return cloudinary.utils.private_download_url(
+            public_id, fmt, resource_type="image", type="upload",
+        )
+    except Exception as e:
+        logger.warning("cloudinary_document_url_failed", error=str(e), public_id=public_id)
+        return f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/image/upload/{public_id}"
+
+
 def delete_resource(public_id: str) -> bool:
     """Delete a resource from Cloudinary."""
     try:

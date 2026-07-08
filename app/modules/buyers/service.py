@@ -494,7 +494,9 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
             full_name=req.full_name,
             phone=req.phone,
             is_active=True,
-            email_verified=False,
+            # Access is controlled by the project code + unit-number check; there
+            # is no separate email-verification step for code self-registration.
+            email_verified=True,
         )
         db.add(user)
         await db.flush()

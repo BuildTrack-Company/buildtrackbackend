@@ -14,7 +14,7 @@ from app.modules.projects.models import Project
 from app.modules.documents.models import ProjectDocument, DOCUMENT_TYPES
 from app.shared.response import ok
 from app.shared.ids import new_id
-from app.shared.storage import get_signed_upload_params
+from app.shared.storage import get_signed_upload_params, get_document_download_url
 from app.shared.audit import log_action
 
 logger = structlog.get_logger(__name__)
@@ -44,10 +44,32 @@ class DocumentUpdate(BaseModel):
     visible_to_buyers: Optional[bool] = None
 
 
+def _doc_format(mime_type: Optional[str]) -> str:
+    """Cloudinary delivery format derived from the stored mime type."""
+    m = (mime_type or "").lower()
+    if "pdf" in m:
+        return "pdf"
+    if "png" in m:
+        return "png"
+    if "jpeg" in m or "jpg" in m:
+        return "jpg"
+    if m.startswith("image/"):
+        return m.split("/", 1)[1]
+    return "pdf"
+
+
 def _serialize(d: ProjectDocument) -> dict:
+    # Return an authenticated download URL (works even though Cloudinary blocks
+    # plain PDF delivery) instead of the raw stored URL.
+    download_url = (
+        get_document_download_url(d.cloudinary_public_id, _doc_format(d.mime_type))
+        if d.cloudinary_public_id else d.cloudinary_url
+    )
     return {
         "id": d.id, "project_id": d.project_id, "title": d.title,
-        "document_type": d.document_type, "cloudinary_url": d.cloudinary_url,
+        "document_type": d.document_type,
+        "cloudinary_url": download_url,
+        "download_url": download_url,
         "cloudinary_public_id": d.cloudinary_public_id, "file_size_bytes": d.file_size_bytes,
         "mime_type": d.mime_type, "visible_to_buyers": d.visible_to_buyers,
         "created_at": d.created_at.isoformat() if d.created_at else None,

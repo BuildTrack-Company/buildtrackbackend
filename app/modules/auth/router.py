@@ -230,7 +230,8 @@ async def register_buyer_by_code(
     """Self-register as a buyer by entering a public project code (no invitation email required)."""
     from app.modules.buyers.service import register_buyer_by_code as _register
     user = await _register(db, req)
-    await service.send_verification_otp(db, user)
+    # No email OTP: the project code + unit-number check is the access control, and
+    # the buyer is signed in immediately, so there is nothing to verify against.
     tokens = await service.create_tokens(user)
     from app.shared.audit import log_action
     await log_action(

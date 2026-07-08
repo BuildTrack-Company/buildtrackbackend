@@ -24,9 +24,9 @@
         {{ reason }}
       </div>
 
-      <p>Please log in to the Developer Portal to review the details and upload the corrected files.</p>
+      <p>Open your Construction Log to see this rejected update, then submit a corrected version. The button below takes you straight to the upload page (you'll be asked to sign in if you aren't already).</p>
       <center>
-        <a href="https://buildtrack.co.ke/login/developer" class="button">Go to Developer Portal</a>
+        <a href="{{ upload_link | default('https://buildtrack.co.ke/login/developer') }}" class="button">Upload a Corrected Update</a>
       </center>
     </div>
   </div>
