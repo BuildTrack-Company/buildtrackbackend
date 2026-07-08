@@ -11,6 +11,32 @@ from app.core.security import hash_password
 from app.core.exceptions import NotFoundError, DuplicateError, ForbiddenError, ValidationError
 
 
+async def _send_member_invite_email(db: AsyncSession, developer_id: str, email: str, full_name: str, org_role: str, token: str):
+    """Email a team invitation with the acceptance link. Awaited so it reliably
+    sends (matches the buyer-invite pattern)."""
+    from app.shared.email import send_email
+    dev = (await db.execute(select(Developer).where(Developer.id == developer_id))).scalar_one_or_none()
+    company = dev.company_name if dev else "your team"
+    invite_link = f"https://buildtrack.co.ke/register/invite/{token}"
+    try:
+        await send_email(
+            to=email,
+            subject=f"You've been invited to join {company} on BuildTrack",
+            html_body=(
+                f"<p>Hello {full_name or 'there'},</p>"
+                f"<p>You've been invited to join <strong>{company}</strong> on BuildTrack "
+                f"as a <strong>{org_role}</strong>.</p>"
+                f"<p>Click the link below to accept the invitation and set your password:</p>"
+                f"<p><a href=\"{invite_link}\">{invite_link}</a></p>"
+                f"<p>This invitation link expires in 7 days.</p>"
+                f"<p>The BuildTrack Team</p>"
+            ),
+        )
+    except Exception as e:  # best effort — don't fail the invite if email hiccups
+        import logging
+        logging.error(f"member invite email failed for {email}: {e}")
+
+
 def _member_dict(m: DeveloperMember, u: Optional[User]) -> dict:
     return {
         "id": m.id,
@@ -110,6 +136,8 @@ async def invite_member_with_token(db: AsyncSession, developer_id: str, email: s
     )
     db.add(member)
     await db.commit()
+
+    await _send_member_invite_email(db, developer_id, email, full_name, org_role, token)
 
     return {
         "id": member.id,
@@ -239,7 +267,15 @@ async def resend_invitation(db: AsyncSession, developer_id: str, member_id: str)
     member.invitation_token_expires_at = now + timedelta(days=7)
     await db.commit()
 
-    # TODO: resend email
+    # Resolve the invitee's name/email for the email.
+    invitee = (await db.execute(select(User).where(User.id == member.user_id))).scalar_one_or_none() if member.user_id else None
+    to_email = member.invited_email or (invitee.email if invitee else None)
+    if to_email:
+        await _send_member_invite_email(
+            db, developer_id, to_email,
+            (invitee.full_name if invitee else "") or "",
+            member.org_role, member.invitation_token,
+        )
     return {"member_id": member.id, "expires_at": member.invitation_token_expires_at}
 
 

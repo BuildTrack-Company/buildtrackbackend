@@ -101,6 +101,8 @@ class AdminProjectCreate(BaseModel):
     site_longitude: Optional[float] = None
     gps_radius_metres: float = 100.0
     total_units: Optional[int] = None
+    # Expected completion date, shown on the public developments cards.
+    estimated_completion: Optional[datetime] = None
     # Subscription is scoped to the project (a developer can run projects on
     # different tiers), so the admin can set it when creating the project.
     subscription_tier: Optional[str] = None

@@ -150,7 +150,8 @@ async def create_project_admin(
         site_latitude=req.site_latitude or 0.0,
         site_longitude=req.site_longitude or 0.0,
         total_units=req.total_units or 0,
-        gps_radius_metres=req.gps_radius_metres
+        gps_radius_metres=req.gps_radius_metres,
+        estimated_completion=req.estimated_completion,
     )
     project = await create_project(db, req.developer_id, project_create)
 
