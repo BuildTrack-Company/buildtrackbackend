@@ -176,6 +176,39 @@ async def create_project_admin(
     return ok(ProjectResponse.model_validate(project).model_dump(), request=request)
 
 
+@router.delete("/projects/{project_id}", status_code=204)
+async def delete_project_admin(
+    project_id: str,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete any project from the platform (admin — not developer-scoped)."""
+    from datetime import datetime, timezone
+    from app.core.exceptions import NotFoundError
+    from app.shared.audit import log_action
+
+    project = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not project:
+        raise NotFoundError("Project not found")
+    project.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    await log_action(
+        db,
+        actor_user_id=current_user.id,
+        actor_role="admin",
+        action="project.deleted.admin",
+        entity_type="project",
+        entity_id=project_id,
+        developer_id=project.developer_id,
+        after={"name": project.name, "project_code": project.project_code},
+        request_id=getattr(request.state, "request_id", None),
+    )
+
+
 @router.get("/buyers")
 async def list_buyers(
     request: Request,

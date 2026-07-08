@@ -160,7 +160,19 @@ async def list_all_inquiries(
     db: AsyncSession = Depends(get_db),
 ):
     rows, total = await service.list_all_admin(db, developer_id, project_id, page, limit)
-    return paginated(
-        [schemas.InquiryResponse.model_validate(r).model_dump() for r in rows],
-        total, page, limit, request=request,
-    )
+
+    # Attach project name so the admin leads table can show + filter by project.
+    proj_ids = list({r.project_id for r in rows})
+    proj_names = {}
+    if proj_ids:
+        proj_names = {
+            pid: name for pid, name in (await db.execute(
+                select(Project.id, Project.name).where(Project.id.in_(proj_ids))
+            )).all()
+        }
+    items = []
+    for r in rows:
+        data = schemas.InquiryResponse.model_validate(r).model_dump()
+        data["project_name"] = proj_names.get(r.project_id)
+        items.append(data)
+    return paginated(items, total, page, limit, request=request)
