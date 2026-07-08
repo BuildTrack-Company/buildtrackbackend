@@ -197,7 +197,11 @@ async def get_buyer_project(
         "location_label": project.location_name,
         "unit_count": project.total_units or 0,
         "unit_number": buyer.unit_number,
-        "construction_progress": project.construction_progress,
+        # Derived from milestones (completed / total) so the bar matches every
+        # other portal and can't be hand-set by the developer.
+        "construction_progress": round(
+            sum(1 for m in milestones if m.status == "complete") / len(milestones) * 100
+        ) if milestones else 0,
         "health_status": project.health_status,
         "construction_health": "overdue" if is_overdue else "on_track",
         "update_frequency_days": threshold_days,

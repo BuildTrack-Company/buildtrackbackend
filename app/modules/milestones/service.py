@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 
 from app.modules.milestones.models import Milestone
@@ -104,6 +104,21 @@ async def complete_milestone(
     )
     remaining = result.scalars().all()
     project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one_or_none()
+
+    # Keep the stored construction_progress in sync with milestone completion
+    # (completed / total). Every portal derives its bar the same way on read, so
+    # progress moves automatically and is never hand-set by the developer.
+    total = (await db.execute(
+        select(func.count()).select_from(Milestone).where(Milestone.project_id == project_id)
+    )).scalar_one()
+    done = (await db.execute(
+        select(func.count()).select_from(Milestone).where(
+            Milestone.project_id == project_id, Milestone.status == "complete"
+        )
+    )).scalar_one()
+    if project:
+        project.construction_progress = round(done / total * 100) if total else 0
+
     if not remaining:
         if project:
             project.status = "completed"

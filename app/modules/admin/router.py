@@ -317,13 +317,13 @@ async def review_upload(
         upload.status = "approved"
         upload.gps_validated = True
 
-        # Update project construction progress from the approved record
+        # Project construction progress is derived from milestone completion
+        # (see milestones.service / public.service), never from the developer's
+        # hand-entered progress on an upload — so nothing is set here.
         project = (await db.execute(select(Project).where(Project.id == upload.project_id))).scalar_one_or_none()
         if project and upload.progress_at_upload is not None:
-            if upload.progress_at_upload > (project.construction_progress or 0):
-                project.construction_progress = upload.progress_at_upload
-            # On a completion record that takes the project to 100, credit the developer
-            if upload.progress_at_upload >= 100 or (upload.category == "Milestone Completed" and project.construction_progress >= 100):
+            # Credit the developer once a completion record marks the build finished.
+            if upload.progress_at_upload >= 100 or (upload.category == "Milestone Completed" and (project.construction_progress or 0) >= 100):
                 from app.modules.developers.models import Developer
                 dev = (await db.execute(select(Developer).where(Developer.id == upload.developer_id))).scalar_one_or_none()
                 if dev:
