@@ -27,6 +27,7 @@ class DeveloperResponse(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     project_count: int = 0
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
 

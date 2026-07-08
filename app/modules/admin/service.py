@@ -29,7 +29,7 @@ async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20, sear
         .subquery()
     )
     stmt = (
-        select(Developer, User.email, User.phone, func.coalesce(proj_count_sq.c.project_count, 0))
+        select(Developer, User.email, User.phone, func.coalesce(proj_count_sq.c.project_count, 0), User.is_active)
         .outerjoin(User, User.id == Developer.user_id)
         .outerjoin(proj_count_sq, proj_count_sq.c.developer_id == Developer.id)
         .where(*conditions)
@@ -40,11 +40,12 @@ async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20, sear
     rows = (await db.execute(stmt)).all()
 
     results = []
-    for dev, email, phone, project_count in rows:
+    for dev, email, phone, project_count, is_active in rows:
         d = dev
         d.__dict__["email"] = email
         d.__dict__["phone"] = phone
         d.__dict__["project_count"] = project_count or 0
+        d.__dict__["is_active"] = bool(is_active) if is_active is not None else True
         results.append(d)
 
     count = (await db.execute(
@@ -140,8 +141,16 @@ async def update_developer_admin(db: AsyncSession, developer_id: str, updates: d
     if not dev:
         raise NotFoundError("Developer not found")
 
+    # Activate / deactivate applies to the developer's login (User.is_active).
+    if "is_active" in updates:
+        user = (await db.execute(select(User).where(User.id == dev.user_id))).scalar_one_or_none()
+        if user:
+            user.is_active = bool(updates["is_active"])
+
     field_map = {"company_description": "company_overview"}
     for field, value in updates.items():
+        if field == "is_active":
+            continue
         mapped = field_map.get(field, field)
         if hasattr(dev, mapped):
             setattr(dev, mapped, value)
