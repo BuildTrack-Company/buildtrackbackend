@@ -156,6 +156,11 @@ async def get_buyer_project(
         raise NotFoundError("Buyer profile not found")
     buyer, project, developer = row
 
+    # Record buyer activity (shown as "last active" in developer + admin portals).
+    from datetime import datetime as _dt, timezone as _tz
+    buyer.last_active_at = _dt.now(_tz.utc)
+    await db.commit()
+
     milestones = (await db.execute(
         select(Milestone).where(Milestone.project_id == project.id).order_by(Milestone.order_index)
     )).scalars().all()

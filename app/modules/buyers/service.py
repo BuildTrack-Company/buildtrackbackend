@@ -499,6 +499,7 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
         db.add(user)
         await db.flush()
 
+    now = datetime.now(timezone.utc)
     buyer = Buyer(
         id=new_id(),
         user_id=user.id,
@@ -507,7 +508,9 @@ async def register_buyer_by_code(db: AsyncSession, req) -> "User":
         full_name=req.full_name,
         unit_number=req.unit_number,
         phone=req.phone,
-        registered_at=datetime.now(timezone.utc),
+        location=getattr(req, "location", None),
+        registered_at=now,
+        last_active_at=now,
         notification_email=True,
     )
     db.add(buyer)

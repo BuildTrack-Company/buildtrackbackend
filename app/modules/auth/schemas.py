@@ -80,6 +80,7 @@ class RegisterBuyerByCodeRequest(BaseModel):
     password: str
     phone: Optional[str] = None
     unit_number: Optional[str] = None
+    location: Optional[str] = None
 
     @field_validator("password")
     @classmethod

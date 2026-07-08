@@ -214,6 +214,8 @@ async def list_buyers(
     for b in buyers:
         data = BuyerResponse.model_validate(b).model_dump()
         data["project_name"] = proj_names.get(b.project_id)
+        # Portal access status for the admin buyers table.
+        data["invitation_status"] = "active" if b.registered_at else "invited"
         items.append(data)
     return paginated(items, count, page, limit, request=request)
 

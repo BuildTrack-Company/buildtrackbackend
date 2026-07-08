@@ -16,6 +16,10 @@ class Buyer(Base):
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     unit_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Where the buyer is based (captured at self-registration).
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Last time the buyer signed in / opened their portal.
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     invitation_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     invitation_token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     invitation_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -32,8 +32,10 @@ class BuyerResponse(BaseModel):
     full_name: Optional[str]
     unit_number: Optional[str]
     phone: Optional[str]
+    location: Optional[str] = None
     invitation_sent_at: Optional[datetime]
     registered_at: Optional[datetime]
+    last_active_at: Optional[datetime] = None
     notification_email: bool
     created_at: datetime
 
