@@ -14,6 +14,12 @@
     .content { background-color: #252535; padding: 40px 32px; border-radius: 0 0 12px 12px; }
     .greeting { font-size: 18px; font-weight: 600; color: #f1f5f9; margin-bottom: 16px; }
     p { color: #94A3B8; font-size: 15px; line-height: 1.7; margin-bottom: 16px; }
+    /* Lists need an explicit light colour — Gmail resets unstyled text to dark,
+       which made these bullets invisible on the dark card. */
+    ul, ol { color: #CBD5E1; font-size: 15px; line-height: 1.7; margin: 0 0 16px 22px; }
+    li { color: #CBD5E1; margin-bottom: 6px; }
+    strong { color: #e2e8f0; }
+    a { color: #5eead4; }
     .btn { display: inline-block; background: linear-gradient(135deg, #0F766E, #14B8A6); color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 24px 0; }
     .divider { border: none; border-top: 1px solid #3A4A5A; margin: 28px 0; }
     .footer { text-align: center; margin-top: 32px; color: #475569; font-size: 12px; line-height: 1.8; }

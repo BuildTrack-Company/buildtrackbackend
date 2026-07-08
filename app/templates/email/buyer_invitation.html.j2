@@ -15,8 +15,12 @@
 </div>
 <p style="font-size:13px;color:#94A3B8;">Please change your password after your first login.</p>
 {% else %}
-<p>To access your private buyer portal, click the link below:</p>
-<p><a href="{{ portal_link }}">{{ portal_link }}</a></p>
+<p>You already have a BuildTrack account. Sign in to your private buyer portal with your existing password:</p>
+<div class="datacard">
+  <p style="margin:0;">Login: <a href="{{ login_url }}">{{ login_url }}</a></p>
+  <p style="margin:0;">Email: <strong>{{ email }}</strong></p>
+</div>
+<p style="font-size:13px;color:#94A3B8;">Forgot your password? Use "Forgot password" on the login page to reset it.</p>
 {% endif %}
 <p><strong>What you will find on your portal:</strong></p>
 <ul>

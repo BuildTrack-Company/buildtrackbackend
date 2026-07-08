@@ -109,7 +109,7 @@ async def invite_buyer(
             "developer_name": company_name,
             "project_name": project.name,
             "project_url": f"https://buildtrack.co.ke/project/{project.project_code}",
-            "portal_link": f"https://buildtrack.co.ke/register?token={token}",
+            "portal_link": "https://buildtrack.co.ke/login/buyer",
             "login_url": "https://buildtrack.co.ke/login/buyer",
             "email": buyer.email,
             "temp_password": temp_password,
@@ -223,6 +223,18 @@ async def resend_invitation(db: AsyncSession, buyer_id: str, project_id: str, de
     buyer.invitation_token_hash = token_hash
     buyer.invitation_token_expires_at = expires_at
     buyer.invitation_sent_at = datetime.now(timezone.utc)
+
+    # Reset the buyer's login to a fresh temporary password so the resent email
+    # always carries working credentials (they sign in directly at /login/buyer).
+    from app.modules.auth.models import User
+    from app.core.security import hash_password
+    from app.shared.code_gen import generate_temp_password
+    temp_password = generate_temp_password()
+    user = (await db.execute(select(User).where(User.id == buyer.user_id))).scalar_one_or_none()
+    if user:
+        user.hashed_password = hash_password(temp_password)
+        user.is_active = True
+        user.email_verified = True
     await db.commit()
     await db.refresh(buyer)
 
@@ -235,7 +247,10 @@ async def resend_invitation(db: AsyncSession, buyer_id: str, project_id: str, de
             "developer_name": "BuildTrack",
             "project_name": project.name,
             "project_url": f"https://buildtrack.co.ke/project/{project.project_code}",
-            "portal_link": f"https://buildtrack.co.ke/register?token={token}",
+            "portal_link": "https://buildtrack.co.ke/login/buyer",
+            "login_url": "https://buildtrack.co.ke/login/buyer",
+            "email": buyer.email,
+            "temp_password": temp_password,
         },
     )
 
