@@ -213,6 +213,29 @@ async def password_reset_confirm(
     return ok({"message": "Password has been reset successfully."}, request=request)
 
 
+@router.post("/password/change")
+async def password_change(
+    req: schemas.PasswordChangeRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the signed-in user's password (buyer or developer) — lets a buyer
+    onboarded with a temporary password set their own without the email flow."""
+    from app.core.security import verify_password, hash_password, validate_password_strength
+    from app.core.exceptions import ValidationError
+    from datetime import datetime, timezone
+
+    if not verify_password(req.current_password, current_user.hashed_password):
+        raise ValidationError("Your current password is incorrect")
+    if not validate_password_strength(req.new_password):
+        raise ValidationError("Password must be at least 10 characters with at least 1 digit or special character")
+    current_user.hashed_password = hash_password(req.new_password)
+    current_user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return ok({"message": "Password changed successfully."}, request=request)
+
+
 @router.get("/me")
 async def get_me(
     request: Request,
