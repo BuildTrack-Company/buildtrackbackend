@@ -366,6 +366,37 @@ async def advance_project_workflow(
     return ok(data, request=request)
 
 
+class AssignWorkflowRequest(BaseModel):
+    workflow_template_id: str
+
+
+@router.post("/projects/{project_id}/workflow/assign", dependencies=[require_permission("projects", "update")])
+async def assign_project_workflow(
+    project_id: str,
+    req: AssignWorkflowRequest,
+    request: Request,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await service.assign_workflow_to_project(
+        db, project_id, ctx.developer_id, req.workflow_template_id
+    )
+    from app.modules.milestones.models import Milestone
+    from app.modules.milestones.schemas import MilestoneResponse
+    result = await db.execute(
+        select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.order_index)
+    )
+    milestones = [MilestoneResponse.model_validate(m).model_dump() for m in result.scalars().all()]
+    return ok(
+        {
+            "project_id": project.id,
+            "workflow_template_id": project.workflow_template_id,
+            "milestones": milestones,
+        },
+        request=request,
+    )
+
+
 @router.post("/projects/{project_id}/delay", dependencies=[require_permission("projects", "update")])
 async def log_project_delay(
     project_id: str,

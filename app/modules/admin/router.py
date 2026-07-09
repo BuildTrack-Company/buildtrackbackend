@@ -769,6 +769,42 @@ async def update_project_subscription(
     }, request=request)
 
 
+class AdminAssignWorkflowRequest(BaseModel):
+    workflow_template_id: str
+
+
+@router.post("/projects/{project_id}/workflow")
+async def assign_project_workflow_admin(
+    project_id: str,
+    req: AdminAssignWorkflowRequest,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.modules.projects.service import assign_workflow_to_project_admin
+    from app.shared.audit import log_action
+
+    project = await assign_workflow_to_project_admin(db, project_id, req.workflow_template_id)
+
+    result = await db.execute(
+        select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.order_index)
+    )
+    milestones = [MilestoneResponse.model_validate(m).model_dump() for m in result.scalars().all()]
+
+    await log_action(
+        db, actor_user_id=current_user.id, actor_role="admin",
+        action="project.workflow_assigned", entity_type="project", entity_id=project.id,
+        developer_id=project.developer_id, after={"workflow_template_id": project.workflow_template_id},
+        request_id=getattr(request.state, "request_id", None),
+    )
+
+    return ok({
+        "project_id": project.id,
+        "workflow_template_id": project.workflow_template_id,
+        "milestones": milestones,
+    }, request=request)
+
+
 # ============================================================
 # Admin IP allow-list CRUD (frontend uses cidr/label aliases)
 # ============================================================

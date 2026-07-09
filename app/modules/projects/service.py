@@ -6,7 +6,7 @@ from typing import List
 
 from app.modules.projects.models import Project
 from app.modules.projects.schemas import ProjectCreate, ProjectUpdate
-from app.core.exceptions import NotFoundError, ForbiddenError
+from app.core.exceptions import NotFoundError, ForbiddenError, ValidationError
 from app.shared.ids import new_id
 from app.shared.code_gen import generate_project_code
 from app.shared.quotas import assert_within_unit_capacity
@@ -125,6 +125,67 @@ async def seed_milestones(db: AsyncSession, project_id: str, workflow_template_i
             )
             db.add(milestone)
     await db.flush()
+
+
+async def _apply_workflow_to_project(db: AsyncSession, project: Project, workflow_template_id: str, *, restrict_developer_id):
+    """Replace a project's milestones with the stages of a workflow template.
+
+    Only allowed while the project is still pending — i.e. no milestone has been
+    started/completed and no update has been uploaded — so re-applying a workflow
+    can never wipe a construction timeline that buyers are already seeing.
+    """
+    from app.modules.project_types.models import WorkflowTemplate
+    from app.modules.milestones.models import Milestone
+    from app.modules.uploads.models import Upload
+    from sqlalchemy import delete, func
+
+    tmpl = (await db.execute(
+        select(WorkflowTemplate).where(WorkflowTemplate.id == workflow_template_id)
+    )).scalar_one_or_none()
+    if not tmpl:
+        raise NotFoundError("Workflow not found")
+    # Developers may only apply built-in (system) templates or ones they created.
+    if restrict_developer_id is not None and tmpl.developer_id not in (None, restrict_developer_id):
+        raise ForbiddenError("You can only apply your own or built-in workflows")
+
+    started = (await db.execute(
+        select(func.count()).select_from(Milestone).where(
+            Milestone.project_id == project.id, Milestone.status != "pending"
+        )
+    )).scalar_one()
+    upload_count = (await db.execute(
+        select(func.count()).select_from(Upload).where(Upload.project_id == project.id)
+    )).scalar_one()
+    if started or upload_count:
+        raise ValidationError(
+            "This project already has construction progress, so its workflow can't be changed. "
+            "Apply a workflow before the first update is logged."
+        )
+
+    await db.execute(delete(Milestone).where(Milestone.project_id == project.id))
+    project.workflow_template_id = tmpl.id
+    project.project_type_id = tmpl.project_type_id
+    project.updated_at = datetime.now(timezone.utc)
+    await seed_milestones(db, project.id, tmpl.id)
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+async def assign_workflow_to_project(db: AsyncSession, project_id: str, developer_id: str, workflow_template_id: str) -> Project:
+    """Developer-scoped: apply a workflow template to one of the developer's projects."""
+    project = await get_project(db, project_id, developer_id)
+    return await _apply_workflow_to_project(db, project, workflow_template_id, restrict_developer_id=developer_id)
+
+
+async def assign_workflow_to_project_admin(db: AsyncSession, project_id: str, workflow_template_id: str) -> Project:
+    """Admin-scoped: apply a workflow template to any project."""
+    project = (await db.execute(
+        select(Project).where(Project.id == project_id, Project.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if not project:
+        raise NotFoundError("Project not found")
+    return await _apply_workflow_to_project(db, project, workflow_template_id, restrict_developer_id=None)
 
 
 async def list_projects(db: AsyncSession, developer_id: str) -> List[Project]:
