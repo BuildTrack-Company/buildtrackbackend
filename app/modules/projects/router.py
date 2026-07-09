@@ -221,6 +221,7 @@ class VisibilityPageUpdate(BaseModel):
     tagline: Optional[str] = None
     starting_price: Optional[str] = None
     slug: Optional[str] = None
+    estimated_completion: Optional[datetime] = None
 
 
 @router.patch("/projects/{project_id}/visibility-page", dependencies=[require_permission("projects", "update")])
@@ -235,6 +236,7 @@ async def update_visibility_page(
         db, project_id, ctx.developer_id,
         description=req.description, tagline=req.tagline,
         starting_price=req.starting_price, slug=req.slug,
+        estimated_completion=req.estimated_completion,
     )
     await log_action(
         db, actor_user_id=ctx.user_id, actor_role=ctx.role,

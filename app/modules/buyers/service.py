@@ -172,9 +172,20 @@ async def invite_buyer(
         select(User).where(User.email == req.email.lower())
     )).scalar_one_or_none()
 
+    # Onboarded buyers don't self-register, so they must always receive working
+    # login credentials. Always issue a fresh temporary password: create the
+    # account if new, or reset it for an existing buyer account.
     temp_password = None
     if existing_user:
         user_id = existing_user.id
+        if existing_user.role == "buyer":
+            temp_password = generate_temp_password()
+            existing_user.hashed_password = hash_password(temp_password)
+            existing_user.is_active = True
+            existing_user.email_verified = True
+        # If the email belongs to a different role (developer/admin), leave that
+        # account alone — temp_password stays None and the email tells them to
+        # sign in with their existing password.
     else:
         temp_password = generate_temp_password()
         user = User(

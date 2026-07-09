@@ -184,6 +184,7 @@ async def delete_project(db: AsyncSession, project_id: str, developer_id: str):
 async def update_visibility_page(
     db: AsyncSession, project_id: str, developer_id: str,
     description: str = None, tagline: str = None, starting_price: str = None, slug: str = None,
+    estimated_completion=None,
 ) -> Project:
     """Update visibility-page content. Slug change validates uniqueness."""
     project = await get_project(db, project_id, developer_id)
@@ -193,6 +194,8 @@ async def update_visibility_page(
         project.visibility_tagline = tagline
     if starting_price is not None:
         project.starting_price = starting_price
+    if estimated_completion is not None:
+        project.estimated_completion = estimated_completion
     if slug is not None and slug != project.slug:
         desired = _slugify(slug)
         clash = await db.execute(
