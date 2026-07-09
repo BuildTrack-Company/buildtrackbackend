@@ -101,6 +101,8 @@ class AdminProjectCreate(BaseModel):
     site_longitude: Optional[float] = None
     gps_radius_metres: float = 100.0
     total_units: Optional[int] = None
+    # Workflow/milestone template to seed this project's milestones from.
+    workflow_template_id: Optional[str] = None
     # Expected completion date, shown on the public developments cards.
     estimated_completion: Optional[datetime] = None
     # Subscription is scoped to the project (a developer can run projects on

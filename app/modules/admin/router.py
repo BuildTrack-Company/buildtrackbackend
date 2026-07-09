@@ -152,6 +152,7 @@ async def create_project_admin(
         total_units=req.total_units or 0,
         gps_radius_metres=req.gps_radius_metres,
         estimated_completion=req.estimated_completion,
+        workflow_template_id=req.workflow_template_id,
     )
     project = await create_project(db, req.developer_id, project_create)
 
