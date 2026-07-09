@@ -253,6 +253,8 @@ async def get_buyer_project(
             "id": m.id, "name": m.name, "order": m.order_index, "status": m.status,
             "planned_date": m.expected_date.isoformat() if m.expected_date else None,
             "actual_date": m.completed_at.isoformat() if m.completed_at else None,
+            "revised_date": m.delay_new_date.isoformat() if m.delay_new_date else None,
+            "delay_reason": m.delay_reason,
         } for m in milestones],
         "photos": photos,
         "updates": updates,
