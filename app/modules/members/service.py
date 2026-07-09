@@ -185,8 +185,32 @@ async def accept_invitation(db: AsyncSession, token: str, full_name: str, passwo
     member.invitation_token = None
     member.invitation_token_expires_at = None
 
+    # Grant the RBAC role matching their org role, scoped to this developer, so
+    # they can actually use the portal (without it, every request is a 403 and
+    # the member lands on an empty portal).
+    await _grant_member_role(db, user.id, member.developer_id, member.org_role, now)
+
     await db.commit()
     return _member_dict(member, user)
+
+
+async def _grant_member_role(db: AsyncSession, user_id: str, developer_id: str, org_role: str, when):
+    from app.modules.roles.models import Role, UserRoleAssignment
+    role_map = {"owner": "developer_owner", "admin": "developer_admin", "member": "developer_member"}
+    role_name = role_map.get(org_role, "developer_member")
+    role = (await db.execute(select(Role).where(Role.name == role_name))).scalar_one_or_none()
+    if not role:
+        return
+    existing = (await db.execute(select(UserRoleAssignment).where(
+        UserRoleAssignment.user_id == user_id,
+        UserRoleAssignment.role_id == role.id,
+        UserRoleAssignment.developer_id == developer_id,
+    ))).scalar_one_or_none()
+    if not existing:
+        db.add(UserRoleAssignment(
+            id=new_id(), user_id=user_id, role_id=role.id,
+            developer_id=developer_id, granted_at=when,
+        ))
 
 
 async def update_member_status(db: AsyncSession, developer_id: str, member_id: str, invitation_status: str) -> dict:
