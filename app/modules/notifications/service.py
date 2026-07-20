@@ -99,7 +99,9 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                         "update_category": upload.category or "Progress Update",
                         "update_date": upload_date,
                         "update_time": upload_time,
-                        "progress_percentage": upload.progress_at_upload or 0,
+                        # construction_progress is the single synced source of truth
+                        # (derived from milestone completion), not the per-upload snapshot.
+                        "progress_percentage": project.construction_progress or 0,
                         "milestone_name": milestone_name,
                         "milestone_number": milestone_number,
                         "update_description": upload.caption or "New photos have been uploaded to track construction progress.",

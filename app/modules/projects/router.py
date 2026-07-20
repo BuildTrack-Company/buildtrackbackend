@@ -498,7 +498,9 @@ async def latest_update_preview(
     )).scalars().all()
 
     caption = upload.caption or upload.title or "New progress on site."
-    progress = upload.progress_at_upload or project.construction_progress or 0
+    # construction_progress is the single synced source of truth (derived from
+    # milestone completion) — never fall back to a stale per-upload snapshot.
+    progress = project.construction_progress or 0
     subject = f"Construction Update — {project.name}"
     body_text = (
         f"{project.name}\n\nProgress: {progress}%\n\n{caption}\n\n"
