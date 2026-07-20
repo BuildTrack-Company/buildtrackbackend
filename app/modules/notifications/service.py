@@ -121,6 +121,7 @@ async def fanout_upload_notifications(upload_id: str, db: AsyncSession):
                     subject=update_subject,
                     template_name="buyer_update_notification.html.j2",
                     status="sent" if sent else "failed",
+                    sent_at=datetime.now(timezone.utc) if sent else None,
                 )
                 db.add(log_entry)
 

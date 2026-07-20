@@ -54,6 +54,9 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         if tmpl:
             project_type_id = tmpl.project_type_id
 
+    from datetime import timedelta
+    trial_ends_at = datetime.now(timezone.utc) + timedelta(days=90)
+
     project = Project(
         id=new_id(),
         developer_id=developer_id,
@@ -70,6 +73,10 @@ async def create_project(db: AsyncSession, developer_id: str, req: ProjectCreate
         status="planning",
         workflow_template_id=workflow_template_id,
         project_type_id=project_type_id,
+        # New projects start on a 90-day trial; Period End in the admin
+        # Subscriptions tab reflects this until the tier is upgraded.
+        trial_ends_at=trial_ends_at,
+        subscription_expires_at=trial_ends_at,
     )
     db.add(project)
     await db.flush()

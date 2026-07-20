@@ -15,11 +15,15 @@ from app.shared.ids import new_id
 from app.core.security import hash_password
 
 
-async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20, search: str = None):
+async def list_developers(db: AsyncSession, page: int = 1, limit: int = 20, search: str = None, status: str = None, tier: str = None):
     offset = (page - 1) * limit
     conditions = [Developer.deleted_at.is_(None)]
     if search:
         conditions.append(Developer.company_name.ilike(f"%{search}%"))
+    if status:
+        conditions.append(Developer.subscription_status == status)
+    if tier:
+        conditions.append(Developer.subscription_tier == tier)
 
     # Join User for email/phone + project count subquery
     proj_count_sq = (

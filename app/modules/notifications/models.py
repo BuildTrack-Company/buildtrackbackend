@@ -20,6 +20,7 @@ class NotificationLog(Base):
     status: Mapped[str] = mapped_column(String(50), default="sent")  # sent, failed, delivered, bounced
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     provider_message_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

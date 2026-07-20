@@ -20,7 +20,7 @@ class Project(Base):
     site_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gps_radius_metres: Mapped[float] = mapped_column(Float, default=100.0)
     total_units: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    status: Mapped[str] = mapped_column(String(50), default="planning")  # planning, construction, completed
+    status: Mapped[str] = mapped_column(String(50), default="planning")  # planning, active, completed
     cover_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     estimated_completion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)

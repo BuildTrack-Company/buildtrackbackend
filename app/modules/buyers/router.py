@@ -157,8 +157,14 @@ async def get_buyer_project(
     buyer, project, developer = row
 
     # Record buyer activity (shown as "last active" in developer + admin portals).
+    # Onboarded buyers (CSV/invite) sign in directly with a temp password and never
+    # go through a separate "accept invitation" step, so registered_at would
+    # otherwise stay null forever — flip it here on their first real portal use so
+    # "Portal Access" moves from "Invite Sent" to "Active".
     from datetime import datetime as _dt, timezone as _tz
     buyer.last_active_at = _dt.now(_tz.utc)
+    if not buyer.registered_at:
+        buyer.registered_at = buyer.last_active_at
     await db.commit()
 
     milestones = (await db.execute(

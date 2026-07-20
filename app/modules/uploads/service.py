@@ -191,6 +191,11 @@ async def finalize_upload(
     db.add(upload)
     await db.flush()
 
+    # First construction update on the project moves it out of "planning" — the
+    # project is now actively under construction, not just scheduled.
+    if project.status == "planning":
+        project.status = "active"
+
     for photo_input in req.photos:
         photo = Photo(
             id=new_id(),

@@ -34,10 +34,12 @@ async def list_developers(
     page: int = 1,
     limit: int = 20,
     search: Optional[str] = None,
+    status: Optional[str] = None,
+    tier: Optional[str] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    developers, total = await service.list_developers(db, page, limit, search=search)
+    developers, total = await service.list_developers(db, page, limit, search=search, status=status, tier=tier)
     return paginated(
         [DeveloperResponse.model_validate(d).model_dump() for d in developers],
         total, page, limit, request=request,
@@ -95,6 +97,9 @@ async def list_projects(
     request: Request,
     page: int = 1,
     limit: int = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    developer_id: Optional[str] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -107,6 +112,14 @@ async def list_projects(
         .where(Buyer.project_id == Project.id, Buyer.deleted_at.is_(None))
         .correlate(Project).scalar_subquery()
     )
+    conditions = [Project.deleted_at.is_(None)]
+    if search:
+        conditions.append(Project.name.ilike(f"%{search}%"))
+    if status:
+        conditions.append(Project.status == status)
+    if developer_id:
+        conditions.append(Project.developer_id == developer_id)
+
     result = await db.execute(
         select(
             Project,
@@ -114,12 +127,12 @@ async def list_projects(
             buyer_count_sq.label("buyer_count"),
         )
         .outerjoin(Developer, Developer.id == Project.developer_id)
-        .where(Project.deleted_at.is_(None))
+        .where(*conditions)
         .order_by(Project.created_at.desc())
         .offset(offset).limit(limit)
     )
     count = (await db.execute(
-        select(func.count()).select_from(Project).where(Project.deleted_at.is_(None))
+        select(func.count()).select_from(Project).where(*conditions)
     )).scalar_one()
 
     rows = []
@@ -129,6 +142,7 @@ async def list_projects(
         data = ProjectResponse.model_validate(proj).model_dump()
         data["developer_name"] = company_name
         data["buyer_count"] = buyer_count or 0
+        data["location"] = proj.location_name
         rows.append(data)
 
     return paginated(rows, count, page, limit, request=request)
@@ -218,6 +232,8 @@ async def list_buyers(
     limit: int = 20,
     project_id: str | None = None,
     developer_id: str | None = None,
+    search: str | None = None,
+    invitation_status: str | None = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -230,6 +246,13 @@ async def list_buyers(
         conditions.append(Buyer.project_id.in_(
             select(Project.id).where(Project.developer_id == developer_id)
         ))
+    if search:
+        from sqlalchemy import or_
+        conditions.append(or_(Buyer.full_name.ilike(f"%{search}%"), Buyer.email.ilike(f"%{search}%")))
+    if invitation_status == "active":
+        conditions.append(Buyer.registered_at.is_not(None))
+    elif invitation_status == "invited":
+        conditions.append(Buyer.registered_at.is_(None))
     result = await db.execute(
         select(Buyer).where(*conditions).order_by(Buyer.created_at.desc()).offset(offset).limit(limit)
     )
@@ -260,11 +283,23 @@ async def list_uploads(
     request: Request,
     page: int = 1,
     limit: int = 20,
+    project_id: Optional[str] = None,
+    developer_id: Optional[str] = None,
+    is_flagged: Optional[str] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
-    rows_result, count = await _query_uploads(db, offset, limit)
+    where = None
+    if is_flagged is not None:
+        where = (Upload.status == "flagged") if is_flagged.lower() == "true" else (Upload.status != "flagged")
+    if search:
+        search_clause = Upload.caption.ilike(f"%{search}%")
+        where = search_clause if where is None else (where & search_clause)
+    rows_result, count = await _query_uploads(
+        db, offset, limit, where=where, project_id=project_id, developer_id=developer_id
+    )
     return paginated(_enrich_uploads(rows_result), count, page, limit, request=request)
 
 
@@ -518,15 +553,31 @@ async def list_audit_log(
     request: Request,
     page: int = 1,
     limit: int = 50,
+    search: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    developer_id: Optional[str] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from sqlalchemy import or_
+
     offset = (page - 1) * limit
+    conditions = []
+    if search:
+        conditions.append(or_(AuditLog.action.ilike(f"%{search}%"), AuditLog.entity_id.ilike(f"%{search}%")))
+    if entity_type:
+        conditions.append(AuditLog.entity_type == entity_type)
+    if entity_id:
+        conditions.append(AuditLog.entity_id == entity_id)
+    if developer_id:
+        conditions.append(AuditLog.developer_id == developer_id)
+
     result = await db.execute(
-        select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+        select(AuditLog).where(*conditions).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
     )
     logs = result.scalars().all()
-    count = (await db.execute(select(func.count()).select_from(AuditLog))).scalar_one()
+    count = (await db.execute(select(func.count()).select_from(AuditLog).where(*conditions))).scalar_one()
 
     # Resolve actor emails in one batched query so the UI can show who did what.
     actor_ids = {l.actor_user_id for l in logs if l.actor_user_id}
@@ -667,8 +718,10 @@ async def list_notifications(
             "channel": n.notification_type,
             "subject": n.subject,
             "template_name": n.template_name,
+            "template": n.template_name,
             "status": n.status,
             "error_message": n.error_message,
+            "sent_at": n.sent_at.isoformat() if n.sent_at else None,
             "created_at": n.created_at.isoformat() if n.created_at else None,
         }
         for n in rows
