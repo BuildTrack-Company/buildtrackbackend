@@ -84,7 +84,9 @@ async def list_projects(
         total = ms_total.get(p.id, 0)
         done = ms_done.get(p.id, 0)
         data["buyer_count"] = buyer_counts.get(p.id, 0)
-        data["milestone_progress"] = round((done / total) * 100) if total else (p.construction_progress or 0)
+        # Stored column — same value shown on the developer's Upload tab, kept
+        # uniform with the buyer portal and public visibility page.
+        data["milestone_progress"] = p.construction_progress or 0
         data["completed_milestones"] = done
         data["milestone_count"] = total
         data["card_image"] = images.get(p.id)

@@ -81,9 +81,10 @@ async def _project_card(db: AsyncSession, project: Project) -> dict:
         "location": project.location_name,
         "unit_count": project.total_units,
         "health_status": project.health_status,
-        # Progress is derived from milestones (completed / total) so it stays in
-        # sync across every portal and is never hand-set by the developer.
-        "construction_progress": round(completed_milestone_count / milestone_count * 100) if milestone_count else 0,
+        # Single synced source of truth: the stored column, same value shown
+        # on the developer's Upload Site Updates tab. Never independently
+        # recomputed here so every portal stays uniform.
+        "construction_progress": project.construction_progress or 0,
         "milestone_count": milestone_count,
         "completed_milestone_count": completed_milestone_count,
         "verified_records_count": verified_records,
@@ -178,8 +179,8 @@ async def get_directory(db: AsyncSession, area: Optional[str] = None, sort: str 
             "location": p.location_name,
             "unit_count": p.total_units,
             "health_status": p.health_status,
-            # Derived from milestones (completed / total) — same value everywhere.
-            "construction_progress": round(m_done / m_total * 100) if m_total else 0,
+            # Stored column — same value shown on the developer's Upload tab.
+            "construction_progress": p.construction_progress or 0,
             "milestone_count": m_total,
             "completed_milestone_count": m_done,
             "verified_records_count": verified_records,
@@ -291,10 +292,8 @@ async def get_visibility_page(db: AsyncSession, slug: str) -> dict:
         },
         "intelligence_status": {
             "health_status": project.health_status,
-            # Derived from milestones (completed / total) — same value everywhere.
-            "construction_progress": round(
-                sum(1 for m in milestones if m.status == "complete") / len(milestones) * 100
-            ) if milestones else 0,
+            # Stored column — same value shown on the developer's Upload tab.
+            "construction_progress": project.construction_progress or 0,
             "last_activity_days_ago": _days_since(last_at),
             "site_active": compute_activity_status(project.activity_overdue_threshold_days, last_at) != "update_overdue",
             "last_milestone": last_milestone.name if last_milestone else None,
