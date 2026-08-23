@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.deps import require_admin
@@ -1067,6 +1067,10 @@ class AdminProjectGpsUpdate(BaseModel):
     site_latitude: Optional[float] = None
     site_longitude: Optional[float] = None
     gps_radius_metres: Optional[float] = None
+    # Drives the "Every N days" update-frequency label on the visibility,
+    # buyer and developer pages. Nothing exposed it before, so it was stuck
+    # at the 14-day default no matter what an admin tried to set.
+    activity_overdue_threshold_days: Optional[int] = Field(default=None, ge=1, le=365)
 
 
 @router.patch("/projects/{project_id}/gps")
@@ -1091,6 +1095,7 @@ async def update_project_gps(
         "site_latitude": proj.site_latitude,
         "site_longitude": proj.site_longitude,
         "gps_radius_metres": proj.gps_radius_metres,
+        "activity_overdue_threshold_days": proj.activity_overdue_threshold_days,
     }
     for field, value in req.model_dump(exclude_none=True).items():
         setattr(proj, field, value)
@@ -1109,6 +1114,7 @@ async def update_project_gps(
         "site_latitude": proj.site_latitude,
         "site_longitude": proj.site_longitude,
         "gps_radius_metres": proj.gps_radius_metres,
+        "activity_overdue_threshold_days": proj.activity_overdue_threshold_days,
     }, request=request)
 
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -26,6 +26,10 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     estimated_completion: Optional[datetime] = None
     is_public: Optional[bool] = None
+    # How often this project promises a verified update. Drives the
+    # "Every N days" label on the visibility, buyer and developer pages.
+    # Was missing here, so edits to it were silently dropped by Pydantic.
+    activity_overdue_threshold_days: Optional[int] = Field(default=None, ge=1, le=365)
 
 
 class ProjectResponse(BaseModel):
