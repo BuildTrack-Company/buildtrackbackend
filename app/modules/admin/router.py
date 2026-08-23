@@ -1055,6 +1055,9 @@ async def get_project_detail(
         "site_latitude": proj.site_latitude,
         "site_longitude": proj.site_longitude,
         "gps_radius_metres": proj.gps_radius_metres,
+        # Needed so the admin Site Settings form shows the project's real
+        # update frequency instead of falling back to an empty placeholder.
+        "activity_overdue_threshold_days": proj.activity_overdue_threshold_days,
         "subscription_tier": proj.subscription_tier,
         "subscription_status": proj.subscription_status,
         "subscription_expires_at": proj.subscription_expires_at.isoformat() if proj.subscription_expires_at else None,
