@@ -39,7 +39,14 @@ class Settings(BaseSettings):
         "http://localhost:8000",  # Swagger UI
         "http://127.0.0.1:8000",
         "https://buildtrack.co.ke",
+        # The www host serves the same frontend and is what visitors reach
+        # whenever the apex is unavailable. Leaving it out blocked every
+        # browser API call at the CORS preflight — logins reported "invalid
+        # credentials" and on-site uploads fell through to "Saved offline",
+        # because a blocked request looks identical to being offline.
+        "https://www.buildtrack.co.ke",
         "https://admin.buildtrack.co.ke",
+        "https://www.admin.buildtrack.co.ke",
         "https://buildtrack-frontend-portal.vercel.app",
         "https://buildtrack-admin-portal.vercel.app",
     ]
