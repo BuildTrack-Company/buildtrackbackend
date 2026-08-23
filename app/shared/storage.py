@@ -25,7 +25,10 @@ def get_signed_upload_params(folder: str, public_id_prefix: str) -> dict:
     try:
         timestamp = int(time.time())
         folder_path = f"{settings.CLOUDINARY_FOLDER_ROOT}/{folder}"
-        public_id = f"{folder_path}/{public_id_prefix}"
+        # Cloudinary already prefixes `folder` onto `public_id`. Including the
+        # folder in both produced doubled paths like
+        # buildtrack/dev/projects/<id>/buildtrack/dev/projects/<id>/<name>.
+        public_id = public_id_prefix
 
         # Params to include in signature (sorted alphabetically, no api_secret)
         params_to_sign = {
