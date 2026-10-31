@@ -45,6 +45,9 @@ class Photo(Base):
     upload_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     cloudinary_public_id: Mapped[str] = mapped_column(String(500), nullable=False)
     cloudinary_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # "image" (default) or "video" — a site update can mix verified photos and
+    # verified videos; both are captured on-site and carry the same GPS/timestamp.
+    media_type: Mapped[str] = mapped_column(String(20), nullable=False, default="image", server_default="image")
     original_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     capture_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     capture_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

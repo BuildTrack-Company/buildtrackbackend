@@ -55,12 +55,39 @@ def get_signed_upload_params(folder: str, public_id_prefix: str) -> dict:
         raise
 
 
-def get_signed_url(public_id: str, transformation: str = "display") -> str:
-    """Get a 15-minute signed URL for a Cloudinary resource."""
-    try:
-        expire_time = int(time.time()) + 900  # 15 minutes
+def get_signed_url(public_id: str, transformation: str = "display", resource_type: str = "image") -> str:
+    """Get a signed delivery URL for a Cloudinary resource.
 
-        # Build transformation based on type
+    `resource_type` is "image" (default) or "video". For a video, "display"
+    streams the clip (mp4) and "thumbnail" returns a still poster frame (first
+    frame as a jpg) so the gallery can show a preview before playback.
+    """
+    try:
+        if resource_type == "video":
+            if transformation == "thumbnail":
+                # Poster frame: first frame delivered as an image.
+                url, _ = cloudinary.utils.cloudinary_url(
+                    public_id,
+                    resource_type="video",
+                    type="upload",
+                    sign_url=True,
+                    secure=True,
+                    format="jpg",
+                    raw_transformation="so_0,q_auto,w_600,c_fill",
+                )
+                return url
+            url, _ = cloudinary.utils.cloudinary_url(
+                public_id,
+                resource_type="video",
+                type="upload",
+                sign_url=True,
+                secure=True,
+                format="mp4",
+                raw_transformation="q_auto,w_1280",
+            )
+            return url
+
+        # Build transformation based on type (images)
         transformations = {
             "display": "q_auto,f_auto,w_1200",
             "thumbnail": "q_auto,f_auto,w_300,h_300,c_fill",
@@ -78,7 +105,8 @@ def get_signed_url(public_id: str, transformation: str = "display") -> str:
         return url
     except Exception as e:
         logger.warning("cloudinary_url_failed", error=str(e), public_id=public_id)
-        return f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/image/upload/{public_id}"
+        rt = "video" if resource_type == "video" else "image"
+        return f"https://res.cloudinary.com/{settings.CLOUDINARY_CLOUD_NAME}/{rt}/upload/{public_id}"
 
 
 def get_document_download_url(public_id: str, fmt: str = "pdf") -> str:

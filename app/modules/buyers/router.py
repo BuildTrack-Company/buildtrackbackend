@@ -187,14 +187,16 @@ async def get_buyer_project(
             select(Photo).where(Photo.upload_id.in_(upload_ids)).order_by(Photo.created_at.desc())
         )).scalars().all()
         for ph in photo_rows:
+            media_type = getattr(ph, "media_type", None) or "image"
             try:
-                url = get_signed_url(ph.cloudinary_public_id, "display")
-                thumb = get_signed_url(ph.cloudinary_public_id, "thumbnail")
+                url = get_signed_url(ph.cloudinary_public_id, "display", resource_type=media_type)
+                thumb = get_signed_url(ph.cloudinary_public_id, "thumbnail", resource_type=media_type)
             except Exception:
                 url = ph.cloudinary_url
                 thumb = ph.cloudinary_url
             entry = {
                 "id": ph.id, "url": url, "thumbnail_url": thumb,
+                "media_type": media_type,
                 "caption": None,
                 "latitude": ph.capture_latitude, "longitude": ph.capture_longitude,
                 "captured_at": ph.created_at.isoformat() if ph.created_at else None,
@@ -242,6 +244,9 @@ async def get_buyer_project(
         "developer_update_consistency_pct": developer.update_consistency_pct if developer else None,
         "developer_description": developer.company_overview if developer else None,
         "location_label": project.location_name,
+        # Registered site coordinates — power the satellite / Google Earth view.
+        "site_latitude": project.site_latitude,
+        "site_longitude": project.site_longitude,
         "unit_count": project.total_units or 0,
         "unit_number": buyer.unit_number,
         # Stored column — same value shown on the developer's Upload tab.
@@ -250,6 +255,8 @@ async def get_buyer_project(
         "construction_health": "overdue" if is_overdue else "on_track",
         "update_frequency_days": threshold_days,
         "days_since_last_update": days_since_update,
+        # Actual timestamp of the last verified site activity (date + time).
+        "last_update_at": last_update_at.isoformat() if last_update_at else None,
         "delay_count": delay_count,
         "notifications_enabled": buyer.notification_email,
         "milestones": [{

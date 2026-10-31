@@ -65,16 +65,17 @@ async def list_projects(
     images = {}
     if latest_upload:
         photo_rows = (await db.execute(
-            select(Photo.upload_id, Photo.cloudinary_public_id)
+            select(Photo.upload_id, Photo.cloudinary_public_id, Photo.media_type)
             .where(Photo.upload_id.in_(list(latest_upload.values())))
             .order_by(Photo.upload_id, Photo.order_index)
         )).all()
         photo_by_upload = {}
-        for up_id, pub in photo_rows:
-            photo_by_upload.setdefault(up_id, pub)
+        for up_id, pub, mt in photo_rows:
+            photo_by_upload.setdefault(up_id, (pub, mt or "image"))
         for pid, up_id in latest_upload.items():
             if up_id in photo_by_upload:
-                images[pid] = get_signed_url(photo_by_upload[up_id], "display")
+                pub, mt = photo_by_upload[up_id]
+                images[pid] = get_signed_url(pub, "display" if mt != "video" else "thumbnail", resource_type=mt)
 
     from app.modules.public.service import compute_activity_status, _days_since
 
@@ -93,6 +94,7 @@ async def list_projects(
         last_at = latest_upload_at.get(p.id)
         data["activity_status"] = compute_activity_status(p.activity_overdue_threshold_days or 14, last_at)
         data["days_since_last_update"] = _days_since(last_at)
+        data["last_update_at"] = last_at.isoformat() if last_at else None
         out.append(data)
     return ok(out, request=request)
 

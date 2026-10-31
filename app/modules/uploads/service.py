@@ -202,6 +202,7 @@ async def finalize_upload(
             upload_id=upload.id,
             cloudinary_public_id=photo_input.cloudinary_public_id,
             cloudinary_url=photo_input.cloudinary_url,
+            media_type=getattr(photo_input, "media_type", None) or "image",
             original_filename=photo_input.original_filename,
             capture_latitude=photo_input.capture_latitude or req.capture_latitude,
             capture_longitude=photo_input.capture_longitude or req.capture_longitude,

@@ -501,7 +501,15 @@ async def get_admin_upload_detail(
     data["photos"] = [
         {
             "id": p.id,
-            "signed_url": get_signed_url(p.cloudinary_public_id),
+            "media_type": getattr(p, "media_type", None) or "image",
+            "signed_url": get_signed_url(
+                p.cloudinary_public_id, "display",
+                resource_type=(getattr(p, "media_type", None) or "image"),
+            ),
+            "thumbnail_url": get_signed_url(
+                p.cloudinary_public_id, "thumbnail",
+                resource_type=(getattr(p, "media_type", None) or "image"),
+            ),
             "capture_latitude": p.capture_latitude,
             "capture_longitude": p.capture_longitude,
             "created_at": p.created_at,

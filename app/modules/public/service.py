@@ -212,11 +212,13 @@ async def _photo_payload(db: AsyncSession, upload_ids: list[str]) -> list[dict]:
     )).scalars().all()
     out = []
     for p in photos:
+        media_type = getattr(p, "media_type", None) or "image"
         out.append({
             "id": p.id,
             "upload_id": p.upload_id,
-            "signed_url": get_signed_url(p.cloudinary_public_id, "display"),
-            "thumbnail_url": get_signed_url(p.cloudinary_public_id, "thumbnail"),
+            "media_type": media_type,
+            "signed_url": get_signed_url(p.cloudinary_public_id, "display", resource_type=media_type),
+            "thumbnail_url": get_signed_url(p.cloudinary_public_id, "thumbnail", resource_type=media_type),
             "capture_latitude": p.capture_latitude,
             "capture_longitude": p.capture_longitude,
             "captured_at": p.created_at,
@@ -289,12 +291,18 @@ async def get_visibility_page(db: AsyncSession, slug: str) -> dict:
             "starting_price": project.starting_price,
             "unit_count": project.total_units,
             "developer_name": dev.company_name if dev else None,
+            # Registered site coordinates — power the satellite / Google Earth view.
+            "site_latitude": project.site_latitude,
+            "site_longitude": project.site_longitude,
         },
         "intelligence_status": {
             "health_status": project.health_status,
             # Stored column — same value shown on the developer's Upload tab.
             "construction_progress": project.construction_progress or 0,
             "last_activity_days_ago": _days_since(last_at),
+            # Actual timestamp of the last verified site activity, shown as
+            # "12 Sep 2026, 14:30 (3 days ago)" across all portals/pages.
+            "last_activity_at": last_at,
             "site_active": compute_activity_status(project.activity_overdue_threshold_days, last_at) != "update_overdue",
             "last_milestone": last_milestone.name if last_milestone else None,
             "next_milestone_date": next_milestone.expected_date if next_milestone else None,

@@ -153,13 +153,14 @@ async def list_uploads(
     if upload_ids:
         rows = (await db.execute(select(Photo).where(Photo.upload_id.in_(upload_ids)).order_by(Photo.order_index))).scalars().all()
         for p in rows:
+            media_type = getattr(p, "media_type", None) or "image"
             try:
-                url = get_signed_url(p.cloudinary_public_id, "display")
-                thumb = get_signed_url(p.cloudinary_public_id, "thumbnail")
+                url = get_signed_url(p.cloudinary_public_id, "display", resource_type=media_type)
+                thumb = get_signed_url(p.cloudinary_public_id, "thumbnail", resource_type=media_type)
             except Exception:
                 url = p.cloudinary_url
                 thumb = p.cloudinary_url
-            photos_by_upload.setdefault(p.upload_id, []).append({"id": p.id, "url": url, "thumbnail_url": thumb})
+            photos_by_upload.setdefault(p.upload_id, []).append({"id": p.id, "url": url, "thumbnail_url": thumb, "media_type": media_type})
     ms_ids = [u.milestone_id for u in uploads if u.milestone_id]
     ms_names: dict[str, str] = {}
     if ms_ids:
@@ -188,7 +189,9 @@ async def get_upload(
     photo_list = []
     for p in photos:
         pd = schemas.PhotoResponse.model_validate(p).model_dump()
-        pd["signed_url"] = get_signed_url(p.cloudinary_public_id)
+        media_type = getattr(p, "media_type", None) or "image"
+        pd["signed_url"] = get_signed_url(p.cloudinary_public_id, "display", resource_type=media_type)
+        pd["thumbnail_url"] = get_signed_url(p.cloudinary_public_id, "thumbnail", resource_type=media_type)
         photo_list.append(pd)
 
     upload_data["photos"] = photo_list

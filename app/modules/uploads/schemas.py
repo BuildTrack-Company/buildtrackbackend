@@ -34,6 +34,7 @@ class UploadSessionResponse(BaseModel):
 class PhotoInput(BaseModel):
     cloudinary_public_id: str
     cloudinary_url: Optional[str] = None
+    media_type: str = "image"  # "image" or "video"
     original_filename: Optional[str] = None
     capture_latitude: Optional[float] = None
     capture_longitude: Optional[float] = None
@@ -93,6 +94,7 @@ class PhotoResponse(BaseModel):
     upload_id: str
     cloudinary_public_id: str
     cloudinary_url: Optional[str]
+    media_type: str = "image"
     original_filename: Optional[str]
     order_index: int
     signed_url: Optional[str] = None
