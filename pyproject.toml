@@ -26,6 +26,17 @@ dependencies = [
     "email-validator==2.2.0",
 ]
 
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# Explicit package discovery — the repo is a flat layout with several top-level
+# dirs (app, alembic, scripts). Newer setuptools refuses to auto-pick, so name
+# the application package (and its subpackages) explicitly. This is what the
+# `pip install .` build step packages; the app is run as `uvicorn app.main:app`.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
