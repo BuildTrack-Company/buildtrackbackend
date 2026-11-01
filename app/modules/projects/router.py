@@ -160,6 +160,20 @@ async def get_project(
     project_data["buyer_count"] = buyer_count
     project_data["photo_count"] = photo_count
 
+    # Last site activity (date + time) — shown in the developer portal the same
+    # way as on the buyer portal and public visibility page.
+    from app.modules.public.service import compute_activity_status, _days_since
+    last_at = (await db.execute(
+        select(Upload.created_at).where(
+            Upload.project_id == project_id, Upload.status == "approved"
+        ).order_by(Upload.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    project_data["last_update_at"] = last_at.isoformat() if last_at else None
+    project_data["days_since_last_update"] = _days_since(last_at)
+    project_data["activity_status"] = compute_activity_status(
+        project.activity_overdue_threshold_days or 14, last_at
+    )
+
     return ok(project_data, request=request)
 
 
